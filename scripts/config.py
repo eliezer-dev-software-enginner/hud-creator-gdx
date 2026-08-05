@@ -19,7 +19,7 @@ def _read_gradle_properties():
 
 _gradle_props = _read_gradle_properties()
 
-APP_NAME = "Plics SW"
+APP_NAME = "Scene2d UI Builder"
 APP_VERSION = _gradle_props["appVersion"]
 MAIN_CLASS = _gradle_props["appMainClass"]
 ICON_PATH = "src/main/resources/assets/app_ico.ico" if os.name == "nt" else "src/main/resources/assets/app_ico.png"

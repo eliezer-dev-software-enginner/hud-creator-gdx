@@ -11,6 +11,19 @@ consumes the exported JSON) and `scene2d-hud-loader` (the library that
 parses it there). The full phase-by-phase build history and design notes
 live in [`docs/plano-de-acao.md`](docs/plano-de-acao.md).
 
+## Before you start: you need a skin
+
+The builder doesn't create a skin for you — it loads one you already have.
+A libGDX skin is three files that go together: `skin.json`, `skin.atlas`,
+and the texture `skin.png` (or whatever they're named — the app follows
+libGDX's own convention of all three living in the same folder, the atlas
+and image sharing the JSON's base name).
+
+If you don't already have one, [**Skin Composer**](https://github.com/raeleus/skin-composer)
+is the standard tool for building a libGDX skin from scratch or reskinning
+one of the free UI packs — export from there, then point this app's
+**Options → Load Skin** at the resulting `skin.json`.
+
 ## Running
 
 ```bash
