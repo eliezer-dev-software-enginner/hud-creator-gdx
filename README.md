@@ -25,6 +25,20 @@ That's it — no `Table` cells, no manual positioning math, no separate loader c
 
 Just a skin: `skin.json` + `.atlas` + the texture `.png`. If you don't already have one lying around, [**Skin Composer**](https://github.com/raeleus/skin-composer) is the standard way to build one from scratch or reskin an existing UI pack — the builder loads whatever it produces directly.
 
+To consume the exported JSON in your game, add the `scene2d-hud-loader` library via JitPack:
+
+```kotlin
+// build.gradle.kts, in the module that needs it
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+dependencies {
+    implementation("com.github.eliezer-dev-software-enginner:scene2d-hud-loader:v1.0.0-beta")
+}
+```
+
+Loader library repo: https://github.com/eliezer-dev-software-enginner/scene2d-hud-loader
+
 ## Features
 
 - **Free-positioning canvas** at your real target resolution — what you see is what you get in-game
@@ -39,10 +53,45 @@ Just a skin: `skin.json` + `.atlas` + the texture `.png`. If you don't already h
 - **Light/dark theme**
 - **Self-contained export** — copies the skin's files alongside the exported JSON, so the output folder is ready to drop straight into your assets
 
+## Consuming the exported JSON
+
+After exporting a layout from the builder, you'll have a JSON file plus the skin's `.json`/`.atlas`/`.png` files sitting next to it (the export is self-contained). Drop that whole folder into your libGDX project's assets (e.g. `android/assets/ui/` or `core/assets/ui/`), then load it with `scene2d-hud-loader`:
+
+```java
+// One-time setup, e.g. in your Screen's show() or an initializer
+HudView hud = HudLoader.load(Gdx.files.internal("ui/hud.json"));
+stage.addActor(hud.root);
+Gdx.input.setInputProcessor(stage);
+```
+
+`HudView` exposes:
+
+- `hud.root` — a `Group` containing every widget you positioned in the builder, already placed at the exact coordinates from your export.
+- `hud.skin` — the real Scene2D `Skin`, built from the same skin files the builder loaded, in case you need it to build additional widgets in code.
+- `hud.get(String nickname, Class<T> type)` — looks up a widget by the nickname you gave it in the builder, cast to the widget type you expect.
+
+Wiring up behavior is just normal Scene2D — look widgets up by nickname and attach listeners as you would with any hand-built UI:
+
+```java
+TextButton playButton = hud.get("play", TextButton.class);
+playButton.addListener(new ClickListener() {
+    @Override
+    public void clicked(InputEvent event, float x, float y) {
+        game.setScreen(new GameScreen());
+    }
+});
+
+Label scoreLabel = hud.get("score", Label.class);
+scoreLabel.setText(String.valueOf(currentScore));
+```
+
+The loader has no dependency on the builder itself — it just reads the exported JSON and skin files, so it's a normal runtime dependency of your game (see [What you need](#what-you-need) above for the JitPack setup).
+
 ## Get it
 
 - Builder (Windows/Linux installers under **Releases**): https://github.com/eliezer-dev-software-enginner/scene2d-ui-builder
 - Loader library (JitPack): `com.github.eliezer-dev-software-enginner:scene2d-hud-loader:v1.0.0-beta`
+- Loader library repo: https://github.com/eliezer-dev-software-enginner/scene2d-hud-loader
 
 Still early — this is a young project and I'm actively working on it, so bug reports, feature requests, and general feedback are very welcome. Let me know if it's useful for your project!
 
