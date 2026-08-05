@@ -1,11 +1,11 @@
 package my_app.skin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.badlogic.gdx.utils.JsonReader;
+import com.badlogic.gdx.utils.JsonValue;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,10 +18,15 @@ import java.util.Map;
  * WindowStyle, ...) is kept generically as a name → field-map, since resolving
  * each field (drawable region name vs. color name vs. plain number) depends on
  * the widget type and is a rendering-phase concern, not a parsing one.
+ * <p>
+ * Parsed with libGDX's own {@link JsonReader}, not a strict JSON library
+ * (Jackson was tried first) - real skin.json files, e.g. what Skin Composer
+ * exports, routinely use libGDX's lenient JSON dialect (unquoted keys and
+ * string values), which a strict parser rejects outright. Using libGDX's own
+ * reader guarantees whatever it accepts here is exactly what {@code Skin}
+ * itself would accept, since it's the same parser.
  */
 public final class SkinJsonParser {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private SkinJsonParser() {
     }
@@ -34,24 +39,22 @@ public final class SkinJsonParser {
     }
 
     public static ParsedSkinJson parse(Path skinJsonFile) throws IOException {
-        JsonNode root = MAPPER.readTree(skinJsonFile.toFile());
+        String content = Files.readString(skinJsonFile);
+        JsonValue root = new JsonReader().parse(content);
 
         Map<String, SkinColor> colors = new LinkedHashMap<>();
         Map<String, String> fontFiles = new LinkedHashMap<>();
         Map<String, Map<String, Map<String, Object>>> styles = new LinkedHashMap<>();
 
-        Iterator<Map.Entry<String, JsonNode>> classEntries = root.fields();
-        while (classEntries.hasNext()) {
-            Map.Entry<String, JsonNode> classEntry = classEntries.next();
-            String simpleName = simpleClassName(classEntry.getKey());
-            JsonNode instances = classEntry.getValue();
+        for (JsonValue classEntry : root) {
+            String simpleName = simpleClassName(classEntry.name);
 
             if (simpleName.equals("Color")) {
-                parseColors(instances, colors);
+                parseColors(classEntry, colors);
             } else if (simpleName.equals("BitmapFont")) {
-                parseFonts(instances, fontFiles);
+                parseFonts(classEntry, fontFiles);
             } else if (simpleName.endsWith("Style")) {
-                styles.put(simpleName, parseStyles(instances));
+                styles.put(simpleName, parseStyles(classEntry));
             }
             // Other declared types (e.g. FreeTypeFontGenerator parameters) aren't
             // needed for loading/preview yet — skipped rather than guessed at.
@@ -60,42 +63,45 @@ public final class SkinJsonParser {
         return new ParsedSkinJson(colors, fontFiles, styles);
     }
 
-    private static void parseColors(JsonNode instances, Map<String, SkinColor> out) {
-        instances.fields().forEachRemaining(entry -> {
-            JsonNode c = entry.getValue();
-            out.put(entry.getKey(), new SkinColor(
-                    c.path("r").asDouble(0),
-                    c.path("g").asDouble(0),
-                    c.path("b").asDouble(0),
-                    c.path("a").asDouble(1)
+    private static void parseColors(JsonValue instances, Map<String, SkinColor> out) {
+        for (JsonValue c : instances) {
+            out.put(c.name, new SkinColor(
+                    c.getDouble("r", 0),
+                    c.getDouble("g", 0),
+                    c.getDouble("b", 0),
+                    c.getDouble("a", 1)
             ));
-        });
+        }
     }
 
-    private static void parseFonts(JsonNode instances, Map<String, String> out) {
-        instances.fields().forEachRemaining(entry -> {
-            String file = entry.getValue().path("file").asText(null);
-            if (file != null) out.put(entry.getKey(), file);
-        });
+    private static void parseFonts(JsonValue instances, Map<String, String> out) {
+        for (JsonValue entry : instances) {
+            String file = entry.getString("file", null);
+            if (file != null) out.put(entry.name, file);
+        }
     }
 
-    private static Map<String, Map<String, Object>> parseStyles(JsonNode instances) {
+    private static Map<String, Map<String, Object>> parseStyles(JsonValue instances) {
         Map<String, Map<String, Object>> out = new LinkedHashMap<>();
-        instances.fields().forEachRemaining(entry -> out.put(entry.getKey(), toFieldMap(entry.getValue())));
+        for (JsonValue entry : instances) {
+            out.put(entry.name, toFieldMap(entry));
+        }
         return out;
     }
 
-    private static Map<String, Object> toFieldMap(JsonNode styleNode) {
+    private static Map<String, Object> toFieldMap(JsonValue styleNode) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        styleNode.fields().forEachRemaining(field -> fields.put(field.getKey(), jsonNodeToValue(field.getValue())));
+        for (JsonValue field : styleNode) {
+            fields.put(field.name, jsonValueToValue(field));
+        }
         return fields;
     }
 
-    private static Object jsonNodeToValue(JsonNode value) {
-        if (value.isTextual()) return value.asText();
+    private static Object jsonValueToValue(JsonValue value) {
+        if (value.isString()) return value.asString();
         if (value.isBoolean()) return value.asBoolean();
-        if (value.isIntegralNumber()) return value.asLong();
-        if (value.isFloatingPointNumber()) return value.asDouble();
+        if (value.isLong()) return value.asLong();
+        if (value.isDouble()) return value.asDouble();
         return value; // nested object/array (e.g. drawable insets) - left for the caller to interpret
     }
 

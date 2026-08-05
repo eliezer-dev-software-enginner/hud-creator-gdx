@@ -42,6 +42,13 @@ dependencies {
 
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
 
+    // JsonReader/JsonValue only, for reading skin.json in libGDX's own lenient
+    // JSON dialect (unquoted keys/values - what Skin Composer actually exports,
+    // which a strict parser like Jackson rejects). Pure text parsing, no
+    // Gdx.app/LWJGL/graphics context needed - doesn't reopen the Fase 0
+    // "no libGDX dependency" decision for anything graphics-related.
+    implementation("com.badlogicgames.gdx:gdx:1.14.2")
+
     implementation("org.kordamp.ikonli:ikonli-core:12.4.0")
     implementation("org.kordamp.ikonli:ikonli-javafx:12.4.0")
     implementation("org.kordamp.ikonli:ikonli-entypo-pack:12.4.0")
