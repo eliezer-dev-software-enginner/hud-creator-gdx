@@ -5,6 +5,8 @@ libGDX Scene2D UI. Load a skin (`skin.json` + `.atlas` + `.png`), drag
 buttons/labels/images from a palette onto a free-positioning canvas, tweak
 canvas size/grid/background, and Save/Export the layout as JSON.
 
+![scene2d-buider screenshot](https://i.ibb.co/JWNSzSX3/Screenshot-from-2026-08-05-13-50-09.png)
+
 Part of the [`scene2d-suite`](..) pair — see [`../README.md`](../README.md)
 for how this project relates to `libgdx-example-game` (the sample game that
 consumes the exported JSON) and `scene2d-hud-loader` (the library that
