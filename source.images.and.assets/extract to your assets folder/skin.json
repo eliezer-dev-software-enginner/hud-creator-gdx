@@ -1,0 +1,93 @@
+{
+"com.badlogic.gdx.graphics.g2d.BitmapFont": {
+	"font": {
+		"file": "Roboto-Black.fnt",
+		"scaledSize": -1,
+		"markupEnabled": false,
+		"flip": false
+	}
+},
+"com.badlogic.gdx.graphics.Color": {
+	"disabled": {
+		"r": 0.94509804,
+		"g": 0.94509804,
+		"b": 0.94509804,
+		"a": 0.5
+	},
+	"lightgray": {
+		"r": 0.94509804,
+		"g": 0.94509804,
+		"b": 0.94509804,
+		"a": 1
+	},
+	"white": {
+		"r": 1,
+		"g": 1,
+		"b": 1,
+		"a": 1
+	}
+},
+"com.badlogic.gdx.scenes.scene2d.ui.Button$ButtonStyle": {
+	"default": {
+		"up": "button-up",
+		"down": "button-down",
+		"over": "button-over",
+		"focused": "button-focused",
+		"disabled": "button-disabled"
+	},
+	"toggle": {
+		"up": "button-up",
+		"down": "button-down",
+		"over": "button-over",
+		"focused": "button-focused",
+		"disabled": "button-disabled",
+		"checked": "button-checked",
+		"checkedOver": "button-checkedOver"
+	},
+	"play": {
+		"up": "play-up",
+		"down": "play-down",
+		"over": "play-over",
+		"focused": "play-focused",
+		"disabled": "play-disabled"
+	}
+},
+"com.badlogic.gdx.scenes.scene2d.ui.ImageButton$ImageButtonStyle": {
+	"default": {
+		"imageUp": "icon-volume-up",
+		"up": "imagebutton-up",
+		"down": "imagebutton-down",
+		"over": "imagebutton-over",
+		"focused": "imagebutton-focused",
+		"disabled": "imagebutton-disabled"
+	}
+},
+"com.badlogic.gdx.scenes.scene2d.ui.ImageTextButton$ImageTextButtonStyle": {
+	"default": {
+		"imageUp": "icon-volume-up",
+		"font": "font",
+		"up": "button-up",
+		"down": "button-down",
+		"over": "button-over",
+		"focused": "button-focused",
+		"disabled": "button-disabled"
+	}
+},
+"com.badlogic.gdx.scenes.scene2d.ui.TextButton$TextButtonStyle": {
+	"default": {
+		"font": "font",
+		"fontColor": "lightgray",
+		"disabledFontColor": "disabled",
+		"up": "button-up",
+		"down": "button-down",
+		"over": "button-over",
+		"focused": "button-focused",
+		"disabled": "button-disabled"
+	},
+	"test": {
+		"font": "font",
+		"up": "button-up",
+		"pressedOffsetY": -2
+	}
+}
+}
