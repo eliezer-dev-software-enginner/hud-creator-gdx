@@ -161,7 +161,7 @@ class HomeScreenViewModelLoadLayoutTest {
             exportingViewModel.exportTo(layoutFile);
 
             Path settingsFile = tempDir.resolve("settings.json");
-            AppStorage.save(new AppSettings(true, layoutFile.toString(), true), settingsFile);
+            AppStorage.save(new AppSettings(true, layoutFile.toString(), true, null), settingsFile);
 
             HomeScreenViewModel viewModel = new HomeScreenViewModel();
             Canva canva = new Canva();
@@ -179,7 +179,7 @@ class HomeScreenViewModelLoadLayoutTest {
     void togglingGridAfterRestoreWritesItBackToAppStorage(@TempDir Path tempDir) throws Exception {
         runOnFxThreadAndWait(() -> {
             Path settingsFile = tempDir.resolve("settings.json");
-            AppStorage.save(new AppSettings(false, null, true), settingsFile);
+            AppStorage.save(new AppSettings(false, null, true, null), settingsFile);
 
             HomeScreenViewModel viewModel = new HomeScreenViewModel();
             Canva canva = new Canva();
@@ -197,7 +197,7 @@ class HomeScreenViewModelLoadLayoutTest {
     void savingAfterRestoreUpdatesTheRememberedLayoutFile(@TempDir Path tempDir) throws Exception {
         runOnFxThreadAndWait(() -> {
             Path settingsFile = tempDir.resolve("settings.json");
-            AppStorage.save(new AppSettings(false, null, true), settingsFile);
+            AppStorage.save(new AppSettings(false, null, true, null), settingsFile);
 
             HomeScreenViewModel viewModel = new HomeScreenViewModel();
             Canva canva = new Canva();

@@ -14,6 +14,7 @@ import my_app.skin.SkinLoader;
 import my_app.skin.SkinModel;
 import my_app.storage.AppSettings;
 import my_app.storage.AppStorage;
+import my_app.storage.CanvasCache;
 import my_app.widget.PlacedWidget;
 
 import java.io.File;
@@ -38,7 +39,9 @@ public class HomeScreenViewModel {
     private final State<String> backgroundImagePath = State.of(null);
     private CanvasController canvasController; // set once by HomeScreen, after both it and the Canva exist
     private Path currentProjectFile; // last file Save wrote to, or the one Load Layout just read - handleSave() overwrites it directly instead of prompting again
+    private Path lastSkinDirectory; // parent of the last skin.json picked via "Load Skin" - handleLoad() opens the chooser there next time
     private Path appStorageFile = AppStorage.DEFAULT_FILE;
+    private Path canvasCacheFile = CanvasCache.DEFAULT_FILE;
     private boolean appStorageEnabled = false; // only true after restoreFromAppStorage() runs - keeps plain `new HomeScreenViewModel()` in tests from writing to disk
 
     public State<SkinModel> skinState() {
@@ -80,10 +83,9 @@ public class HomeScreenViewModel {
     }
 
     /**
-     * Restores the grid toggle and auto-reopens the last layout JSON from
-     * {@link AppStorage} — call once, from {@code HomeScreen.onMount()}. Does
-     * nothing (not even an error) if there's no settings file yet (first
-     * run) or the remembered layout file no longer exists.
+     * Restores the grid toggle and whatever was on the Canva last — call
+     * once, from {@code HomeScreen.onMount()}. Does nothing (not even an
+     * error) if there's no settings file yet (first run).
      */
     public void restoreFromAppStorage() {
         restoreFromAppStorage(AppStorage.DEFAULT_FILE);
@@ -92,16 +94,28 @@ public class HomeScreenViewModel {
     /** The {@link Path}-taking half of {@link #restoreFromAppStorage()} — separated out so tests can point at a temp file instead of the real one. */
     void restoreFromAppStorage(Path file) {
         appStorageFile = file;
+        canvasCacheFile = file.resolveSibling("canvas-cache.json");
         appStorageEnabled = true;
 
         AppSettings settings = AppStorage.load(file);
         showingGrid.set(settings.showingGrid());
-
+        if (settings.lastSkinDirectory() != null) {
+            lastSkinDirectory = Path.of(settings.lastSkinDirectory());
+        }
         if (settings.lastLayoutFile() != null) {
             Path layoutFile = Path.of(settings.lastLayoutFile());
+            // Just remembered here so a later Save() still overwrites the right file, even
+            // if the cache below restores newer, never-explicitly-saved content on top of it.
             if (Files.isRegularFile(layoutFile)) {
-                loadLayoutFrom(layoutFile);
+                currentProjectFile = layoutFile;
             }
+        }
+
+        restoreFromCanvasCache();
+        if (skin.get() == null && currentProjectFile != null) {
+            // No cache (e.g. this feature didn't exist yet last time the app closed) -
+            // fall back to reopening the last explicit save, same as before.
+            loadLayoutFrom(currentProjectFile);
         }
 
         // Only wired up now (not unconditionally at construction) - subscribing earlier would
@@ -111,13 +125,51 @@ public class HomeScreenViewModel {
         // The active theme isn't a field on this viewModel (ThemeManager already owns it
         // globally, see Main) - just re-persist whenever it changes, same as the grid toggle.
         ThemeManager.state().subscribe(theme -> persistAppStorage());
+        // Whatever's actually on the Canva, mirrored continuously - see CanvasCache.
+        skin.subscribe(s -> persistCanvasCache());
+        canvasWidth.subscribe(w -> persistCanvasCache());
+        canvasHeight.subscribe(h -> persistCanvasCache());
+        backgroundImagePath.subscribe(p -> persistCanvasCache());
+        placedWidgets.subscribe(w -> persistCanvasCache());
     }
 
     private void persistAppStorage() {
         if (!appStorageEnabled) return;
         String lastLayoutFile = currentProjectFile == null ? null : currentProjectFile.toString();
         boolean isLightTheme = ThemeManager.theme() == Themes.light;
-        AppStorage.save(new AppSettings(showingGrid.get(), lastLayoutFile, isLightTheme), appStorageFile);
+        String skinDir = lastSkinDirectory == null ? null : lastSkinDirectory.toString();
+        AppStorage.save(new AppSettings(showingGrid.get(), lastLayoutFile, isLightTheme, skinDir), appStorageFile);
+    }
+
+    /** Mirrors the Canva's current state into {@link CanvasCache}, or clears it once nothing's loaded (e.g. after {@link #handleNew()}) — there's nothing meaningful to restore without a skin. */
+    private void persistCanvasCache() {
+        if (!appStorageEnabled) return;
+
+        SkinModel currentSkin = skin.get();
+        if (currentSkin == null) {
+            CanvasCache.clear(canvasCacheFile);
+            return;
+        }
+
+        UiLayout layout = UiLayoutAssembler.assemble(
+                currentSkin.skinJsonPath().toAbsolutePath().normalize().toString(),
+                canvasWidth.get(), canvasHeight.get(),
+                backgroundImagePath.get(), // already absolute - see handleLoadBackgroundImage()/resolveBackgroundImagePath()
+                placedWidgets.get());
+        CanvasCache.save(layout, canvasCacheFile);
+    }
+
+    /** Restores whatever {@link #persistCanvasCache()} last wrote, if anything. Unlike {@link #loadLayoutFrom}, doesn't touch {@link #currentProjectFile} — the cache isn't a file the user chose, so "Save" should still prompt for one. */
+    private void restoreFromCanvasCache() {
+        UiLayout layout = CanvasCache.load(canvasCacheFile);
+        if (layout == null) return;
+
+        try {
+            applyLayout(layout, canvasCacheFile);
+        } catch (RuntimeException e) {
+            // Stale/corrupt cache (e.g. the skin it points at was since moved/deleted) -
+            // same as a missing lastLayoutFile: start from a blank Canva instead of crashing.
+        }
     }
 
     /** Feedback from the last Save/Export attempt (success or failure), shown in the status bar. */
@@ -190,22 +242,40 @@ public class HomeScreenViewModel {
         chooser.setTitle("Load skin (skin.json)");
         chooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("libGDX skin (skin.json)", "*.json"));
-
-        Path exampleAssetsDir = Path.of("source.images.and.assets", "extract to your assets folder");
-        if (Files.isDirectory(exampleAssetsDir)) {
-            chooser.setInitialDirectory(exampleAssetsDir.toAbsolutePath().toFile());
-        }
+        chooser.setInitialDirectory(initialSkinDirectory());
 
         File selected = chooser.showOpenDialog(MegalodonteApp.getCurrentContext().javafxStage());
         if (selected == null) return;
 
+        loadSkinFrom(selected.toPath());
+    }
+
+    /** The part of {@link #handleLoad()} after the file dialog — separated out so it's testable without a real open dialog. */
+    void loadSkinFrom(Path selected) {
+        lastSkinDirectory = selected.toAbsolutePath().normalize().getParent();
+        persistAppStorage();
+
         try {
-            SkinModel loaded = SkinLoader.load(selected.toPath());
+            SkinModel loaded = SkinLoader.load(selected);
             loadError.set(null);
             skin.set(loaded);
         } catch (RuntimeException e) {
             loadError.set(e.getMessage());
         }
+    }
+
+    /** Where "Load Skin" opens its file chooser: wherever the last skin.json was picked from (persisted across restarts), or the bundled example assets the very first time. */
+    private File initialSkinDirectory() {
+        if (lastSkinDirectory != null && Files.isDirectory(lastSkinDirectory)) {
+            return lastSkinDirectory.toFile();
+        }
+        Path exampleAssetsDir = Path.of("source.images.and.assets", "extract to your assets folder");
+        return Files.isDirectory(exampleAssetsDir) ? exampleAssetsDir.toAbsolutePath().toFile() : null;
+    }
+
+    /** The directory "Load Skin" would currently open in — tests only. */
+    Path lastSkinDirectory() {
+        return lastSkinDirectory;
     }
 
     /**
@@ -332,18 +402,7 @@ public class HomeScreenViewModel {
     void loadLayoutFrom(Path layoutFile) {
         try {
             UiLayout layout = UiLayoutReader.read(layoutFile);
-            Path skinFile = layoutFile.toAbsolutePath().normalize().getParent().resolve(layout.skinPath());
-            SkinModel loadedSkin = SkinLoader.load(skinFile);
-
-            List<PlacedWidget> widgets = layout.widgets().stream().map(UiLayoutAssembler::fromDto).toList();
-
-            loadError.set(null);
-            skin.set(loadedSkin);
-            canvasWidth.set(layout.canvasWidth());
-            canvasHeight.set(layout.canvasHeight());
-            backgroundImagePath.set(resolveBackgroundImagePath(layout, layoutFile));
-            bumpNextWidgetIdPast(widgets);
-            canvasController.loadLayout(widgets);
+            applyLayout(layout, layoutFile);
             currentProjectFile = layoutFile;
             persistAppStorage();
 
@@ -351,6 +410,22 @@ public class HomeScreenViewModel {
         } catch (IOException | RuntimeException e) {
             statusMessage.set("Failed to load layout: " + e.getMessage());
         }
+    }
+
+    /** Applies a parsed {@link UiLayout} onto the Canva — shared by {@link #loadLayoutFrom} and {@link #restoreFromCanvasCache}, which differ only in whether {@link #currentProjectFile} should change. {@code sourceFile} is where relative {@code skinPath}/{@code backgroundImagePath} are resolved against (an absolute path in either field resolves unchanged regardless). */
+    private void applyLayout(UiLayout layout, Path sourceFile) {
+        Path skinFile = sourceFile.toAbsolutePath().normalize().getParent().resolve(layout.skinPath());
+        SkinModel loadedSkin = SkinLoader.load(skinFile);
+
+        List<PlacedWidget> widgets = layout.widgets().stream().map(UiLayoutAssembler::fromDto).toList();
+
+        loadError.set(null);
+        skin.set(loadedSkin);
+        canvasWidth.set(layout.canvasWidth());
+        canvasHeight.set(layout.canvasHeight());
+        backgroundImagePath.set(resolveBackgroundImagePath(layout, sourceFile));
+        bumpNextWidgetIdPast(widgets);
+        canvasController.loadLayout(widgets);
     }
 
     private static String resolveBackgroundImagePath(UiLayout layout, Path layoutFile) {

@@ -5,7 +5,6 @@ import os
 
 ROOT = Path(__file__).resolve().parent.parent
 
-
 def _read_gradle_properties():
     props = {}
     with open(ROOT / "gradle.properties") as f:
@@ -19,11 +18,24 @@ def _read_gradle_properties():
 
 _gradle_props = _read_gradle_properties()
 
-APP_NAME = "Scene2d UI Builder"
-APP_VERSION = _gradle_props["appVersion"]
+APP_NAME = _gradle_props["appDisplayName"]
+
+# appVersion (base, x.x.x) + appPatch (contador, 0 = sem patch) compostos numa
+# única string — mesma lógica de build.gradle.kts. Ver gradle.properties.
+_patch_number = int(_gradle_props.get("appPatch", "0") or 0)
+APP_VERSION = _gradle_props["appVersion"] if _patch_number == 0 else f"{_gradle_props['appVersion']}.{_patch_number}"
+
 MAIN_CLASS = _gradle_props["appMainClass"]
+VENDOR = _gradle_props["appVendor"]
+LINUX_MENU_GROUP = _gradle_props["appLinuxMenuGroup"]
 ICON_PATH = "src/main/resources/assets/app_ico.ico" if os.name == "nt" else "src/main/resources/assets/app_ico.png"
 JAVAFX_VERSION = "25.0.1"
+
+# Upgrade code fixo do MSI (Windows) — não é específico do updater, por isso mora
+# aqui e não em updater_config.py. Precisa ser o mesmo em toda geração de MSI
+# (com ou sem updater) pra o Windows tratar uma nova versão como upgrade da
+# anterior em vez de instalar um produto "diferente" ao lado.
+UPGRADE_UUID = "e3a2b1c4-7d5f-4a8e-9c6b-2f1d0a3e7b8c"
 
 
 def get_platform():
@@ -36,8 +48,8 @@ def javafx_dir():
     javafx_modules_home = os.environ.get("JAVAFX_MODULES_HOME")
     if not javafx_modules_home:
         raise EnvironmentError(
-            "Environment variable JAVAFX_MODULES_HOME is not set. "
-            "Point it to the folder containing "
+            "Variável de ambiente JAVAFX_MODULES_HOME não definida. "
+            "Defina-a apontando para a pasta que contém "
             f"{get_platform()}-{JAVAFX_VERSION}/."
         )
     return Path(javafx_modules_home) / f"{get_platform()}-{JAVAFX_VERSION}"
@@ -59,7 +71,7 @@ def run_gradle(*tasks):
 def find_jar():
     jars = list((ROOT / "build" / "libs").glob("*.jar"))
     if not jars:
-        raise FileNotFoundError("No JAR found in build/libs/")
+        raise FileNotFoundError("Nenhum JAR encontrado em build/libs/")
     return jars[0]
 
 
@@ -86,8 +98,7 @@ def run_jlink(temp_dir: Path):
     java_bin = Path(_java_home()) / "bin"
     jdeps_cmd = str(java_bin / "jdeps")
     base_modules = {
-        "javafx.controls", "java.sql", "jdk.zipfs", "java.logging", "java.xml",
-        "jdk.charsets",   # needed for codepages like Cp860, Cp437 (ESC/POS)
+        "javafx.controls", "java.sql", "jdk.zipfs", "java.logging", "java.xml"
     }
     try:
         jdeps = subprocess.run(
@@ -136,6 +147,9 @@ def run_jpackage(temp_dir: Path, pkg_type: str, extra_args: list = None):
         "--input", str(temp_dir),
         "--name", APP_NAME,
         "--app-version", APP_VERSION,
+        "--vendor", VENDOR,
+        # java options permite obter o campo em runtime.
+        "--java-options", f"-Dmegalodonte.appVersion={APP_VERSION}",
         "--main-jar", "app.jar",
         "--main-class", MAIN_CLASS,
         "--dest", "dist",
@@ -158,7 +172,7 @@ def smoke_test(temp_dir):
     try:
         proc.wait(timeout=5)
         if proc.returncode != 0:
-            raise RuntimeError(f"Smoke test failed (exit code {proc.returncode})")
+            raise RuntimeError(f"Smoke test falhou (exit code {proc.returncode})")
     except subprocess.TimeoutExpired:
         proc.terminate()
         proc.wait()
@@ -176,7 +190,7 @@ def rename_output(pkg_type: str):
     ext = f".{pkg_type}"
     files = list(dist_dir.glob(f"*{ext}"))
     if not files:
-        raise FileNotFoundError(f"No {ext} package generated in dist/")
+        raise FileNotFoundError(f"Nenhum pacote {ext} gerado em dist/")
     final_name = f"{APP_NAME}-{APP_VERSION}{ext}"
     files[0].rename(dist_dir / final_name)
     return dist_dir / final_name

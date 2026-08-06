@@ -19,6 +19,7 @@ class AppStorageTest {
         assertTrue(settings.showingGrid());
         assertNull(settings.lastLayoutFile());
         assertTrue(settings.isLightTheme());
+        assertNull(settings.lastSkinDirectory());
     }
 
     @Test
@@ -31,12 +32,13 @@ class AppStorageTest {
         assertTrue(settings.showingGrid());
         assertNull(settings.lastLayoutFile());
         assertTrue(settings.isLightTheme());
+        assertNull(settings.lastSkinDirectory());
     }
 
     @Test
     void saveThenLoadRoundTrips(@TempDir Path tempDir) {
         Path file = tempDir.resolve("nested/settings.json");
-        AppSettings original = new AppSettings(true, "/some/path/hud.json", false);
+        AppSettings original = new AppSettings(true, "/some/path/hud.json", false, "/some/path/skins");
 
         AppStorage.save(original, file);
 

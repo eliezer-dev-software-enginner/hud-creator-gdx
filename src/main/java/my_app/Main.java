@@ -8,7 +8,10 @@ import my_app.storage.AppStorage;
 
 public class Main {
 
+
     static void main() {
+        final String version = System.getProperty("megalodonte.appVersion", "");
+
         AppSettings settings = AppStorage.load();
         ThemeManager.setTheme(settings.isLightTheme() ? Themes.light : Themes.dark);
 
@@ -17,19 +20,14 @@ public class Main {
             var stage = context.javafxStage();
             stage.setMinWidth(1000);
             stage.setMinHeight(600);
-            stage.setTitle("Scene2d - UIBuilder");
+
+            stage.setTitle("Scene2d - UIBuilder " + version);
 
             HomeScreenViewModel viewModel = new HomeScreenViewModel();
 
-            ThemeManager.state().subscribe(currentTheme -> {
-                HomeScreen screen = new HomeScreen(viewModel, currentTheme);
-                if (stage.getScene() == null) {
-                    context.useView(screen);
-                } else {
-                    context.updateView(screen);
-                }
-            });
-
+            ThemeManager.state().subscribe(currentTheme ->
+                    context.updateView(new HomeScreen(viewModel, currentTheme))
+            );
         }, ev->{
             if(ev == MegalodonteApp.Event.CloseRequest){
                 System.out.println("Clicked on X - close application");
