@@ -152,8 +152,8 @@ variables from a login shell.
 
 Packaging with the updater (does not modify the original scripts):
 ```bash
-python scripts/create-msi-with-updater.py   # Windows
-python scripts/create-deb-with-updater.py   # Linux
+python scripts/create-msi.py   # Windows
+python scripts/create-deb.py   # Linux
 ```
 
 ## Hot Reload
