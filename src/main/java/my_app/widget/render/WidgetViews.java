@@ -6,7 +6,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import megalodonte.base.components.Component;
-import my_app.skin.AtlasRegion;
 import my_app.skin.SkinColor;
 import my_app.skin.SkinModel;
 import my_app.skin.render.DrawableView;
@@ -41,19 +40,19 @@ public final class WidgetViews {
     }
 
     private static Component buildImage(SkinModel skin, Image atlasImage, WidgetSpec.ImageSpec spec) {
-        AtlasRegion region = skin.region(spec.regionName())
+        SkinModel.ResolvedDrawable drawable = skin.drawable(spec.regionName())
                 .orElseThrow(() -> new IllegalArgumentException("Unknown region: " + spec.regionName()));
-        return DrawableView.of(atlasImage, region);
+        return DrawableView.of(atlasImage, drawable.region(), drawable.tint());
     }
 
     private static Component buildButton(SkinModel skin, Image atlasImage, WidgetSpec.ButtonSpec spec) {
-        AtlasRegion region = resolveRegion(skin, "ButtonStyle", spec.styleName(), "up");
-        return DrawableView.of(atlasImage, region);
+        SkinModel.ResolvedDrawable drawable = resolveDrawable(skin, "ButtonStyle", spec.styleName(), "up");
+        return DrawableView.of(atlasImage, drawable.region(), drawable.tint());
     }
 
     private static Component buildTextButton(SkinModel skin, Image atlasImage, WidgetSpec.TextButtonSpec spec) {
-        AtlasRegion region = resolveRegion(skin, "TextButtonStyle", spec.styleName(), "up");
-        Component background = DrawableView.of(atlasImage, region);
+        SkinModel.ResolvedDrawable drawable = resolveDrawable(skin, "TextButtonStyle", spec.styleName(), "up");
+        Component background = DrawableView.of(atlasImage, drawable.region(), drawable.tint());
 
         Text label = new Text(spec.text());
         label.setFill(resolveFontColor(skin, "TextButtonStyle", spec.styleName()));
@@ -70,13 +69,13 @@ public final class WidgetViews {
         return Component.CreateFromJavaFxNode(label);
     }
 
-    private static AtlasRegion resolveRegion(SkinModel skin, String styleClass, String styleName, String field) {
+    private static SkinModel.ResolvedDrawable resolveDrawable(SkinModel skin, String styleClass, String styleName, String field) {
         Map<String, Object> style = requireStyle(skin, styleClass, styleName);
         Object value = style.get(field);
         if (!(value instanceof String regionName)) {
             throw new IllegalArgumentException(styleClass + "." + styleName + " has no \"" + field + "\" drawable");
         }
-        return skin.region(regionName)
+        return skin.drawable(regionName)
                 .orElseThrow(() -> new IllegalArgumentException("Region not found: " + regionName));
     }
 

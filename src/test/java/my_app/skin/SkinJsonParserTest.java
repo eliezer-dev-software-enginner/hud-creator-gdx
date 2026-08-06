@@ -50,6 +50,67 @@ class SkinJsonParserTest {
     }
 
     @Test
+    void parsesTintedDrawableAliasesWithANamedColor(@TempDir Path tempDir) throws IOException {
+        // Same shape as the gdx-skins "flat-earth" pack: a TintedDrawable
+        // reuses "button-close"'s art, recolored, under the alias "button-close-c".
+        // SkinJsonParser used to silently skip this whole class, which is what
+        // caused WidgetViews to throw "Region not found: button-close-c".
+        String relaxedJson = """
+                {
+                com.badlogic.gdx.graphics.Color: {
+                	color: { r: 1, g: 0, b: 0, a: 1 }
+                }
+                com.badlogic.gdx.scenes.scene2d.ui.Skin$TintedDrawable: {
+                	button-close-c: {
+                		name: button-close
+                		color: color
+                	}
+                }
+                }""";
+        Path jsonFile = tempDir.resolve("flat-earth-ui.json");
+        Files.writeString(jsonFile, relaxedJson);
+
+        var parsed = SkinJsonParser.parse(jsonFile);
+
+        TintedDrawableRef ref = parsed.tintedDrawables().get("button-close-c");
+        assertEquals("button-close", ref.regionName());
+        assertEquals(1, ref.tint().r());
+        assertEquals(0, ref.tint().g());
+    }
+
+    @Test
+    void parsesTintedDrawableAliasesWithAnInlineColor(@TempDir Path tempDir) throws IOException {
+        // Same shape as the gdx-skins "plain-james" pack: the color is given
+        // as an inline {r, g, b, a} literal instead of a name reference.
+        // SkinJsonParser used to only support the name-reference form, so
+        // this shape was silently dropped (colorName ended up null), which
+        // caused WidgetViews to throw "Region not found: round-dark-gray".
+        String relaxedJson = """
+                {
+                com.badlogic.gdx.scenes.scene2d.ui.Skin$TintedDrawable: {
+                	round-dark-gray: {
+                		name: round-white
+                		color: {
+                			r: 0.22
+                			g: 0.22
+                			b: 0.22
+                			a: 1
+                		}
+                	}
+                }
+                }""";
+        Path jsonFile = tempDir.resolve("plain-james-ui.json");
+        Files.writeString(jsonFile, relaxedJson);
+
+        var parsed = SkinJsonParser.parse(jsonFile);
+
+        TintedDrawableRef ref = parsed.tintedDrawables().get("round-dark-gray");
+        assertEquals("round-white", ref.regionName());
+        assertEquals(0.22, ref.tint().r());
+        assertEquals(1, ref.tint().a());
+    }
+
+    @Test
     void parsesStrictQuotedSkinJsonToo(@TempDir Path tempDir) throws IOException {
         String strictJson = """
                 {

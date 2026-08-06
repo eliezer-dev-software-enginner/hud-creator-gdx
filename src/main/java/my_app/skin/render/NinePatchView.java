@@ -12,6 +12,7 @@ import javafx.scene.layout.BorderWidths;
 import javafx.scene.layout.Region;
 import megalodonte.base.components.Component;
 import my_app.skin.AtlasRegion;
+import my_app.skin.SkinColor;
 
 /**
  * Renders a 9-patch {@link AtlasRegion} (one with {@code split} data) using
@@ -23,6 +24,11 @@ public class NinePatchView extends Component {
     private final Region region;
 
     public NinePatchView(Image atlasImage, AtlasRegion atlasRegion) {
+        this(atlasImage, atlasRegion, null);
+    }
+
+    /** {@code tint} is non-null when {@code atlasRegion} is a {@code Skin.TintedDrawable} alias's base region. */
+    public NinePatchView(Image atlasImage, AtlasRegion atlasRegion, SkinColor tint) {
         super(new Region());
         this.region = (Region) this.node;
 
@@ -56,6 +62,8 @@ public class NinePatchView extends Component {
         region.setBackground(Background.EMPTY);
         region.setBorder(new Border(borderImage));
         region.setPrefSize(atlasRegion.width(), atlasRegion.height());
+
+        DrawableView.applyTint(region, tint);
     }
 
     /** Resizes the rendered patch — corners/edges keep their native pixel size, only the center stretches. */

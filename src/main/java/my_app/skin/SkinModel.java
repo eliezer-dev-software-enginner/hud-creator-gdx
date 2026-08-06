@@ -19,6 +19,7 @@ public final class SkinModel {
     private final Map<String, SkinColor> colors;
     private final Map<String, String> fontFiles;
     private final Map<String, Map<String, Map<String, Object>>> styles;
+    private final Map<String, TintedDrawableRef> tintedDrawables;
 
     public SkinModel(
             Path skinJsonPath,
@@ -26,7 +27,8 @@ public final class SkinModel {
             Map<String, AtlasRegion> regions,
             Map<String, SkinColor> colors,
             Map<String, String> fontFiles,
-            Map<String, Map<String, Map<String, Object>>> styles
+            Map<String, Map<String, Map<String, Object>>> styles,
+            Map<String, TintedDrawableRef> tintedDrawables
     ) {
         this.skinJsonPath = skinJsonPath;
         this.atlasImagePath = atlasImagePath;
@@ -34,6 +36,7 @@ public final class SkinModel {
         this.colors = Map.copyOf(colors);
         this.fontFiles = Map.copyOf(fontFiles);
         this.styles = Map.copyOf(styles);
+        this.tintedDrawables = Map.copyOf(tintedDrawables);
     }
 
     public Path skinJsonPath() {
@@ -50,6 +53,35 @@ public final class SkinModel {
 
     public Collection<AtlasRegion> regions() {
         return regions.values();
+    }
+
+    /**
+     * Resolves a drawable name the way libGDX's own {@code Skin.getDrawable}
+     * does: either a plain atlas region directly, or — if {@code name} isn't
+     * one — a {@code Skin.TintedDrawable} alias, in which case the result is
+     * that alias's own base region plus the {@link SkinColor} it should be
+     * tinted with. A style field (e.g. {@code ButtonStyle.up}) can point at
+     * either kind, so callers resolving one shouldn't need to care which.
+     */
+    public Optional<ResolvedDrawable> drawable(String name) {
+        AtlasRegion direct = regions.get(name);
+        if (direct != null) {
+            return Optional.of(new ResolvedDrawable(direct, null));
+        }
+
+        TintedDrawableRef tinted = tintedDrawables.get(name);
+        if (tinted == null) {
+            return Optional.empty();
+        }
+        AtlasRegion base = regions.get(tinted.regionName());
+        if (base == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ResolvedDrawable(base, tinted.tint()));
+    }
+
+    /** {@code tint} is {@code null} for a plain region, non-null when {@code region} should be recolored (a {@code Skin.TintedDrawable} alias). */
+    public record ResolvedDrawable(AtlasRegion region, SkinColor tint) {
     }
 
     public Optional<SkinColor> color(String name) {

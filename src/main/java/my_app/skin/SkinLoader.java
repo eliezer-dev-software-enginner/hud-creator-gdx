@@ -48,7 +48,8 @@ public final class SkinLoader {
                     regionsByName,
                     parsedJson.colors(),
                     parsedJson.fontFiles(),
-                    parsedJson.styles()
+                    parsedJson.styles(),
+                    parsedJson.tintedDrawables()
             );
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read skin at " + skinJsonPath, e);

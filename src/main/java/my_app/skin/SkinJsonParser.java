@@ -34,7 +34,8 @@ public final class SkinJsonParser {
     public record ParsedSkinJson(
             Map<String, SkinColor> colors,
             Map<String, String> fontFiles,
-            Map<String, Map<String, Map<String, Object>>> styles
+            Map<String, Map<String, Map<String, Object>>> styles,
+            Map<String, TintedDrawableRef> tintedDrawables
     ) {
     }
 
@@ -42,17 +43,27 @@ public final class SkinJsonParser {
         String content = Files.readString(skinJsonFile);
         JsonValue root = new JsonReader().parse(content);
 
+        // Colors are collected in their own pass first: a TintedDrawable's
+        // "color" field can reference one by name, and JSON top-level key
+        // order isn't guaranteed to put the Color block before TintedDrawable.
         Map<String, SkinColor> colors = new LinkedHashMap<>();
+        for (JsonValue classEntry : root) {
+            if (simpleClassName(classEntry.name).equals("Color")) {
+                parseColors(classEntry, colors);
+            }
+        }
+
         Map<String, String> fontFiles = new LinkedHashMap<>();
         Map<String, Map<String, Map<String, Object>>> styles = new LinkedHashMap<>();
+        Map<String, TintedDrawableRef> tintedDrawables = new LinkedHashMap<>();
 
         for (JsonValue classEntry : root) {
             String simpleName = simpleClassName(classEntry.name);
 
-            if (simpleName.equals("Color")) {
-                parseColors(classEntry, colors);
-            } else if (simpleName.equals("BitmapFont")) {
+            if (simpleName.equals("BitmapFont")) {
                 parseFonts(classEntry, fontFiles);
+            } else if (simpleName.equals("TintedDrawable")) {
+                parseTintedDrawables(classEntry, colors, tintedDrawables);
             } else if (simpleName.endsWith("Style")) {
                 styles.put(simpleName, parseStyles(classEntry));
             }
@@ -60,7 +71,32 @@ public final class SkinJsonParser {
             // needed for loading/preview yet — skipped rather than guessed at.
         }
 
-        return new ParsedSkinJson(colors, fontFiles, styles);
+        return new ParsedSkinJson(colors, fontFiles, styles, tintedDrawables);
+    }
+
+    private static void parseTintedDrawables(JsonValue instances, Map<String, SkinColor> colors, Map<String, TintedDrawableRef> out) {
+        for (JsonValue entry : instances) {
+            String regionName = entry.getString("name", null);
+            SkinColor tint = resolveColorField(entry.get("color"), colors);
+            if (regionName != null && tint != null) {
+                out.put(entry.name, new TintedDrawableRef(regionName, tint));
+            }
+        }
+    }
+
+    /** {@code color} fields accept either a name (looked up against {@code colors}) or an inline {@code {r, g, b, a}} literal. */
+    private static SkinColor resolveColorField(JsonValue colorField, Map<String, SkinColor> colors) {
+        if (colorField == null) return null;
+        if (colorField.isString()) return colors.get(colorField.asString());
+        if (colorField.isObject()) {
+            return new SkinColor(
+                    colorField.getDouble("r", 0),
+                    colorField.getDouble("g", 0),
+                    colorField.getDouble("b", 0),
+                    colorField.getDouble("a", 1)
+            );
+        }
+        return null;
     }
 
     private static void parseColors(JsonValue instances, Map<String, SkinColor> out) {
