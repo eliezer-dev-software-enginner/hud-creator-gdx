@@ -3,6 +3,7 @@ package my_app;
 import javafx.stage.FileChooser;
 import megalodonte.application.MegalodonteApp;
 import megalodonte.base.state.State;
+import megalodonte.base.theme.ThemeManager;
 import megalodonte.v2.ListState;
 import my_app.project.SkinAssetExporter;
 import my_app.project.UiLayout;
@@ -33,7 +34,7 @@ public class HomeScreenViewModel {
     private final AtomicInteger nextWidgetId = new AtomicInteger(1);
     private final State<String> statusMessage = State.of("");
     private final State<String> selectedWidgetId = State.of(null);
-    private final State<Boolean> showingGrid = State.of(false);
+    private final State<Boolean> showingGrid = State.of(true);
     private final State<String> backgroundImagePath = State.of(null);
     private CanvasController canvasController; // set once by HomeScreen, after both it and the Canva exist
     private Path currentProjectFile; // last file Save wrote to, or the one Load Layout just read - handleSave() overwrites it directly instead of prompting again
@@ -73,6 +74,11 @@ public class HomeScreenViewModel {
         this.canvasController = controller;
     }
 
+    /** The controller for whichever Canva is currently on screen — a new one every {@code HomeScreen.render()} call (tests only; production code goes through {@link #canvasController}'s call sites above). */
+    CanvasController canvasController() {
+        return canvasController;
+    }
+
     /**
      * Restores the grid toggle and auto-reopens the last layout JSON from
      * {@link AppStorage} — call once, from {@code HomeScreen.onMount()}. Does
@@ -102,12 +108,16 @@ public class HomeScreenViewModel {
         // fire immediately with the just-applied defaults/loaded value and write to disk even
         // for viewModels tests construct directly without ever calling this method.
         showingGrid.subscribe(value -> persistAppStorage());
+        // The active theme isn't a field on this viewModel (ThemeManager already owns it
+        // globally, see Main) - just re-persist whenever it changes, same as the grid toggle.
+        ThemeManager.state().subscribe(theme -> persistAppStorage());
     }
 
     private void persistAppStorage() {
         if (!appStorageEnabled) return;
         String lastLayoutFile = currentProjectFile == null ? null : currentProjectFile.toString();
-        AppStorage.save(new AppSettings(showingGrid.get(), lastLayoutFile), appStorageFile);
+        boolean isLightTheme = ThemeManager.theme() == Themes.light;
+        AppStorage.save(new AppSettings(showingGrid.get(), lastLayoutFile, isLightTheme), appStorageFile);
     }
 
     /** Feedback from the last Save/Export attempt (success or failure), shown in the status bar. */

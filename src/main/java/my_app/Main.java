@@ -3,11 +3,14 @@ package my_app;
 import megalodonte.ListenerManager;
 import megalodonte.application.MegalodonteApp;
 import megalodonte.base.theme.ThemeManager;
+import my_app.storage.AppSettings;
+import my_app.storage.AppStorage;
 
 public class Main {
 
     static void main() {
-        ThemeManager.setTheme(Themes.light);
+        AppSettings settings = AppStorage.load();
+        ThemeManager.setTheme(settings.isLightTheme() ? Themes.light : Themes.dark);
 
         MegalodonteApp.run(context ->
         {

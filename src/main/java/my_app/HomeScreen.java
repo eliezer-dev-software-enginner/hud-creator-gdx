@@ -57,6 +57,12 @@ public class HomeScreen implements ScreenComponent {
 
         CanvasController canvasController = new CanvasController(canva, viewModel);
         viewModel.attachCanvasController(canvasController);
+        // render() builds a brand-new Canva/CanvasController every time - including on a
+        // theme switch, which rebuilds the whole screen but skips onMount() (see
+        // Context.updateView) and so never re-triggers restoreFromAppStorage()'s layout
+        // load. Re-placing whatever's already in viewModel.placedWidgets() (unaffected by
+        // the rebuild) is what actually keeps widgets on screen across a theme switch.
+        canvasController.loadLayout(viewModel.placedWidgets().get());
         wireCanvasDropTarget(canva, canvasController);
 
         SkinPalettePanel palette = new SkinPalettePanel(viewModel, canvasController, currentTheme);

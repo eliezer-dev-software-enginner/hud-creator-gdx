@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,8 +16,9 @@ class AppStorageTest {
     void loadReturnsDefaultsWhenFileIsMissing(@TempDir Path tempDir) {
         AppSettings settings = AppStorage.load(tempDir.resolve("does-not-exist.json"));
 
-        assertFalse(settings.showingGrid());
+        assertTrue(settings.showingGrid());
         assertNull(settings.lastLayoutFile());
+        assertTrue(settings.isLightTheme());
     }
 
     @Test
@@ -28,14 +28,15 @@ class AppStorageTest {
 
         AppSettings settings = AppStorage.load(file);
 
-        assertFalse(settings.showingGrid());
+        assertTrue(settings.showingGrid());
         assertNull(settings.lastLayoutFile());
+        assertTrue(settings.isLightTheme());
     }
 
     @Test
     void saveThenLoadRoundTrips(@TempDir Path tempDir) {
         Path file = tempDir.resolve("nested/settings.json");
-        AppSettings original = new AppSettings(true, "/some/path/hud.json");
+        AppSettings original = new AppSettings(true, "/some/path/hud.json", false);
 
         AppStorage.save(original, file);
 

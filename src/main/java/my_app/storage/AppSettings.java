@@ -6,9 +6,9 @@ package my_app.storage;
  * reopened automatically on the next launch instead of starting from a
  * blank Canva.
  */
-public record AppSettings(boolean showingGrid, String lastLayoutFile) {
+public record AppSettings(boolean showingGrid, String lastLayoutFile, boolean isLightTheme) {
 
     public static AppSettings defaults() {
-        return new AppSettings(false, null);
+        return new AppSettings(true, null, true);
     }
 }
