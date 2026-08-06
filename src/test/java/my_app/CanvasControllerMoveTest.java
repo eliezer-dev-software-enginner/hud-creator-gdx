@@ -327,6 +327,30 @@ class CanvasControllerMoveTest {
         });
     }
 
+    @Test
+    void gridColorIsVisibleAgainstEitherTheme() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+            Canva canva = new Canva();
+            fixedSizePane(canva, 300, 150);
+
+            // The same faint color for both themes used to read as basically invisible
+            // against a dark background - each theme now gets its own grid color,
+            // picked from whichever theme is active when the controller (and so the
+            // whole Canva) gets (re)built.
+            megalodonte.base.theme.ThemeManager.setTheme(Themes.light);
+            CanvasController lightController = new CanvasController(canva, viewModel);
+            assertEquals(Themes.GRID_COLOR_LIGHT, lightController.gridColor());
+
+            megalodonte.base.theme.ThemeManager.setTheme(Themes.dark);
+            CanvasController darkController = new CanvasController(new Canva(), viewModel);
+            assertEquals(Themes.GRID_COLOR_DARK, darkController.gridColor());
+            assertTrue(darkController.gridColor().getBrightness() > lightController.gridColor().getBrightness(),
+                    "dark theme's grid color should be a light color (to show up against a dark background), unlike light theme's");
+        });
+    }
+
     private static Region fixedSizePane(Canva canva, double width, double height) {
         Region pane = (Region) canva.getNode();
         pane.setMinSize(width, height);

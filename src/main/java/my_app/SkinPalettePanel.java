@@ -52,6 +52,8 @@ final class SkinPalettePanel {
     private final Column root;
     /** Populated by {@link #rebuildCatalog} whenever a skin is loaded; only visible while {@link Show} says so. */
     private final Column catalogArea = new Column(new ColumnProps().spacingOf(12).fillHeight());
+    /** Wraps {@link #catalogArea} so the whole Palette scrolls as one once its content (Properties + every catalog section + the region list) outgrows the sidebar, instead of only the region list's own nested scroll being reachable. */
+    private final Scroll catalogScroll = new Scroll(catalogArea);
     private final CanvasController canvasController;
 
     SkinPalettePanel(HomeScreenViewModel viewModel, CanvasController canvasController, ThemeInterface theme) {
@@ -75,7 +77,7 @@ final class SkinPalettePanel {
 
         Component body = Show.when(hasError,
                 () -> errorText,
-                () -> Show.when(hasSkin, () -> catalogArea, () -> noSkinText).fillHeight())
+                () -> Show.when(hasSkin, () -> catalogScroll, () -> noSkinText).fillHeight())
                 .fillHeight();
 
         root.children(new Text("Palette", new TextProps().bold()), body);
@@ -93,6 +95,22 @@ final class SkinPalettePanel {
 
     Component asComponent() {
         return root;
+    }
+
+    /** The unwrapped catalog content (tests only) — its own {@code prefHeight} is the true, unclipped content height, unlike {@link #catalogScroll}'s (which deliberately doesn't grow to fit it — that's the whole point of wrapping it). */
+    Column catalogArea() {
+        return catalogArea;
+    }
+
+    /** The Scroll wrapping {@link #catalogArea} (tests only). */
+    Scroll catalogScroll() {
+        return catalogScroll;
+    }
+
+    /** The region list built by {@link #buildRegionList} — always the last child added in {@link #rebuildCatalog} (tests only). */
+    Node regionListNode() {
+        var children = ((VBox) catalogArea.getNode()).getChildren();
+        return children.get(children.size() - 1);
     }
 
     /** {@link Column} is declarative/append-only (no "clear and rebuild" API) — the catalog's row count is only known once a skin is loaded, so repopulating it still needs direct access to the underlying VBox. */
@@ -122,7 +140,7 @@ final class SkinPalettePanel {
         catalogNode.getChildren().add(buildRegionList(skin, atlasImage).getNode());
     }
 
-    /** Shows the selected widget's id/type and a live-editable nickname field, or null if no widget is selected. */
+    /** Shows the selected widget's id/type, a live-editable nickname field, and (for TextButton/Label widgets) a live-editable text field — or null if no widget is selected. */
     private Component buildPropertiesSection(HomeScreenViewModel viewModel) {
         String selectedId = viewModel.selectedWidgetIdState().get();
         if (selectedId == null) return null;
@@ -139,14 +157,163 @@ final class SkinPalettePanel {
                     canvasController.setNickname(widget.id(), value.isBlank() ? null : value.trim());
                     return OnChangeResult.same(value);
                 });
+        Row nicknameRow = new Row().children(new Text("Nickname:"), new SpacerHorizontal(6), nicknameInput);
 
-        Row row = new Row().children(new Text("Nickname:"), new SpacerHorizontal(6), nicknameInput);
-
-        return new Column(new ColumnProps().spacingOf(6)).children(
+        Column column = new Column(new ColumnProps().spacingOf(6)).children(
                 sectionHeader("Properties"),
                 new Text(widget.id() + " — " + widgetTypeLabel(widget.spec())),
-                row
+                nicknameRow
         );
+
+        Component textRow = buildTextRow(widget);
+        if (textRow != null) {
+            column.children(textRow);
+        }
+
+        Component fontRow = buildFontRow(widget);
+        if (fontRow != null) {
+            column.children(fontRow);
+        }
+
+        Component sizeRow = buildSizeRow(widget);
+        if (sizeRow != null) {
+            column.children(sizeRow);
+        }
+
+        return column;
+    }
+
+    /** A live-editable "Text:" row for a {@code TextButtonSpec}/{@code LabelSpec} widget, or null for the other kinds (no text to edit). */
+    private Component buildTextRow(PlacedWidget widget) {
+        String currentText = switch (widget.spec()) {
+            case WidgetSpec.TextButtonSpec s -> s.text();
+            case WidgetSpec.LabelSpec s -> s.text();
+            default -> null;
+        };
+        if (currentText == null) return null;
+
+        State<String> textState = State.of(currentText);
+        Component textInput = new Input(textState, new InputProps().width(150))
+                .onChange(value -> {
+                    canvasController.setText(widget.id(), value);
+                    return OnChangeResult.same(value);
+                });
+
+        return new Row().children(new Text("Text:"), new SpacerHorizontal(6), textInput);
+    }
+
+    /**
+     * A live-editable "Font:" row (color hex + scale multiplier, side by
+     * side) for a {@code TextButtonSpec}/{@code LabelSpec} widget, or null
+     * for the other kinds — same "blank clears the override, back to the
+     * skin's own font" convention as "Nickname:". {@code fontScale} is a
+     * multiplier (1 = the skin's own size, not an absolute point size) —
+     * see {@link WidgetSpec.TextButtonSpec}'s own Javadoc for why.
+     */
+    private Component buildFontRow(PlacedWidget widget) {
+        String currentColor = switch (widget.spec()) {
+            case WidgetSpec.TextButtonSpec s -> s.fontColor();
+            case WidgetSpec.LabelSpec s -> s.fontColor();
+            default -> null;
+        };
+        Double currentScale = switch (widget.spec()) {
+            case WidgetSpec.TextButtonSpec s -> s.fontScale();
+            case WidgetSpec.LabelSpec s -> s.fontScale();
+            default -> null;
+        };
+        if (!(widget.spec() instanceof WidgetSpec.TextButtonSpec) && !(widget.spec() instanceof WidgetSpec.LabelSpec)) {
+            return null;
+        }
+
+        Component colorInput = new Input(State.of(currentColor == null ? "" : currentColor),
+                new InputProps().width(80).placeHolder("#rrggbb"))
+                .onChange(value -> {
+                    String trimmed = value.isBlank() ? null : value.trim();
+                    canvasController.setFontColor(widget.id(), trimmed);
+                    return OnChangeResult.same(value);
+                });
+
+        String defaultScaleText = formatScale(currentScale == null ? 1.0 : currentScale);
+        Component scaleInput = new Input(State.of(defaultScaleText), new InputProps().width(40))
+                .onChange(value -> {
+                    if (value.isBlank()) {
+                        canvasController.setFontScale(widget.id(), null);
+                        return OnChangeResult.same(value);
+                    }
+                    Double parsed = parseSize(value);
+                    if (parsed == null) {
+                        return OnChangeResult.same(defaultScaleText);
+                    }
+                    canvasController.setFontScale(widget.id(), parsed);
+                    return OnChangeResult.same(value);
+                });
+
+        return new Row().children(
+                new Text("Font:"), new SpacerHorizontal(6),
+                colorInput, new SpacerHorizontal(6), scaleInput, new Text("x"));
+    }
+
+    private static String formatScale(double value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+    }
+
+    /**
+     * A live-editable "Size:" row (Width/Height, side by side) for the
+     * selected widget — the numeric counterpart of dragging the Canva's
+     * resize handle, for exact values instead of eyeballing it. Reads the
+     * live node's actual current size (not {@code widget.width()/height()},
+     * which is {@code null} until the widget's ever been resized at all) so
+     * it always starts from what's really on screen. Or null if the widget's
+     * node can't be found (shouldn't happen for a selected widget, but
+     * {@link CanvasController#setSize} already guards the same way).
+     */
+    private Component buildSizeRow(PlacedWidget widget) {
+        Node node = canvasController.nodeFor(widget.id());
+        if (node == null) return null;
+
+        Component widthInput = new Input(State.of(formatSize(node.prefWidth(-1))), new InputProps().width(55))
+                .onChange(value -> applySizeEdit(widget.id(), value, node.prefWidth(-1), true));
+        Component heightInput = new Input(State.of(formatSize(node.prefHeight(-1))), new InputProps().width(55))
+                .onChange(value -> applySizeEdit(widget.id(), value, node.prefHeight(-1), false));
+
+        return new Row().children(
+                new Text("Size:"), new SpacerHorizontal(6),
+                widthInput, new Text(" x "), heightInput);
+    }
+
+    /**
+     * Applies one half (width or height) of a "Size:" field edit — the other
+     * half stays whatever the node's live current size already is, read
+     * fresh each call so editing width then height (or vice versa) composes
+     * correctly instead of one clobbering the other with a stale value.
+     * Invalid/non-numeric/non-positive input is rejected (field reverts to
+     * the last real size) rather than resizing to something nonsensical.
+     */
+    private OnChangeResult applySizeEdit(String widgetId, String typed, double fallbackIfInvalid, boolean isWidth) {
+        Double parsed = parseSize(typed);
+        if (parsed == null) {
+            return OnChangeResult.same(formatSize(fallbackIfInvalid));
+        }
+
+        Node node = canvasController.nodeFor(widgetId);
+        double currentWidth = node == null ? parsed : node.prefWidth(-1);
+        double currentHeight = node == null ? parsed : node.prefHeight(-1);
+        canvasController.setSize(widgetId, isWidth ? parsed : currentWidth, isWidth ? currentHeight : parsed);
+        return OnChangeResult.same(typed);
+    }
+
+    private static Double parseSize(String value) {
+        try {
+            double parsed = Double.parseDouble(value.trim());
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static String formatSize(double value) {
+        long rounded = Math.round(value);
+        return String.valueOf(rounded);
     }
 
     private static String widgetTypeLabel(WidgetSpec spec) {
@@ -181,6 +348,23 @@ final class SkinPalettePanel {
         return new Text(text, new TextProps().bold().fontSize(13));
     }
 
+    /**
+     * Deliberately a plain {@link Column}, not its own nested {@code Scroll}
+     * anymore — {@link #catalogScroll} already scrolls the whole Palette.
+     * The nested version used to rely on {@code Scroll}'s own
+     * {@code Vgrow.ALWAYS} (set unconditionally in its constructor) claiming
+     * whatever height was *left over* inside {@link #catalogArea}'s VBox
+     * once every other section took its own preferred height — a real
+     * height only by accident, whenever something further up the chain
+     * handed {@code catalogArea} more space than it strictly needed. Once
+     * {@code catalogArea} became {@code catalogScroll}'s own content, its
+     * {@code relayoutOnce()} started resizing {@code catalogArea} to
+     * *exactly* its computed preferred height (by design — that's how a
+     * {@code Scroll} sizes its content before clipping/scrolling it), which
+     * leaves zero leftover space — collapsing the region list's own nested
+     * {@code Scroll} (whose natural preferred height, with only unmanaged
+     * children, is ~0) down to a sliver instead of a real list.
+     */
     private Component buildRegionList(SkinModel skin, Image atlasImage) {
         List<AtlasRegion> regions = skin.regions().stream()
                 .sorted(Comparator.comparing(AtlasRegion::name))
@@ -203,7 +387,7 @@ final class SkinPalettePanel {
             list.children(row);
         }
 
-        return new Scroll(list);
+        return list;
     }
 
     /** Lets {@code previewNode} be dragged onto the Canva, carrying {@code spec} via {@link DragPayload}. */

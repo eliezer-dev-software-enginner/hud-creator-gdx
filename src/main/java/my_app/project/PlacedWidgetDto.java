@@ -11,7 +11,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * omits whichever ones don't apply instead of writing them out as null.
  * {@code nickname} (also omitted when unset) is an optional, user-assigned
  * label the libGDX-side loader indexes actors by, so game code can look one
- * up and attach a real listener to it.
+ * up and attach a real listener to it. {@code width}/{@code height} (also
+ * omitted when unset) are only written once the user actually resizes a
+ * widget — absent means "size it from the skin's own preferred size," the
+ * same as every layout exported before this field existed. {@code fontColor}
+ * ({@code #rrggbb}/{@code #rrggbbaa}) and {@code fontScale} (a multiplier,
+ * not an absolute size — matches libGDX's own {@code Label.setFontScale})
+ * only apply to {@code textButton}/{@code label}, and only when the user's
+ * actually overridden them — absent means "the skin style's own font," same
+ * backward-compatible convention as every other optional field here.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PlacedWidgetDto(
@@ -22,6 +30,10 @@ public record PlacedWidgetDto(
         String text,
         double x,
         double y,
-        String nickname
+        String nickname,
+        Double width,
+        Double height,
+        String fontColor,
+        Double fontScale
 ) {
 }

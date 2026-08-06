@@ -28,7 +28,7 @@ class HomeScreenViewModelExportTest {
         viewModel.canvasWidthState().set(640);
         viewModel.canvasHeightState().set(360);
         viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
-        viewModel.placedWidgets().add(new PlacedWidget("widget-1", new WidgetSpec.ButtonSpec("default"), 4.5, 18.5, null));
+        viewModel.placedWidgets().add(new PlacedWidget("widget-1", new WidgetSpec.ButtonSpec("default"), 4.5, 18.5, null, null, null));
 
         Path outputFile = tempDir.resolve("ui/hud.json");
         viewModel.exportTo(outputFile);

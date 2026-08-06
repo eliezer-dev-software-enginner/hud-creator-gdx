@@ -6,7 +6,9 @@ package my_app.widget;
  * own contract. {@code nickname} is an optional, user-assigned label (e.g.
  * "jogar") distinct from {@code id} (auto-generated, e.g. "widget-3") — the
  * libGDX-side loader looks actors up by nickname so game code can attach real
- * listeners to them after loading.
+ * listeners to them after loading. {@code width}/{@code height} are {@code null}
+ * until the user drags the resize handle — meaning "still the skin's own
+ * preferred size," not "zero."
  */
-public record PlacedWidget(String id, WidgetSpec spec, double x, double y, String nickname) {
+public record PlacedWidget(String id, WidgetSpec spec, double x, double y, String nickname, Double width, Double height) {
 }

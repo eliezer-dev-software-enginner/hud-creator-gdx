@@ -11,7 +11,11 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import megalodonte.base.components.Component;
+import megalodonte.base.theme.ThemeManager;
 import megalodonte.components.layout_components.Canva;
 import my_app.skin.SkinModel;
 import my_app.skin.render.SkinImages;
@@ -51,14 +55,24 @@ final class CanvasController {
     private static final double GUIDE_WIDTH_NEAR = 1;
     private static final double GUIDE_WIDTH_SNAPPED = 2.5;
     private static final double GRID_SPACING = 20;
-    private static final Color GRID_COLOR = Themes.GRID_COLOR;
+    private static final double RESIZE_HANDLE_SIZE = 10;
+    private static final double MIN_WIDGET_SIZE = 10;
 
     private final Canva canva;
     private final HomeScreenViewModel viewModel;
     private final Map<String, Node> nodesById = new HashMap<>();
+    private final Map<String, Text> textNodesById = new HashMap<>();
+    /** Each text widget's font size *before* any {@code fontScale} override — {@link #setFontScale} always multiplies from here, never from the node's current (possibly already-scaled) size, so repeated edits don't compound. */
+    private final Map<String, Double> baseFontSizeById = new HashMap<>();
     private final Line verticalCenterGuide = new Line();
     private final Line horizontalCenterGuide = new Line();
     private final Canvas gridCanvas = new Canvas();
+    private final Rectangle resizeHandle = new Rectangle(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+    // Same color for both themes read as "basically invisible" against a dark
+    // background - resolved once here from whichever theme is active when
+    // this Canva is (re)built, not a shared static (the whole HomeScreen,
+    // this controller included, gets rebuilt fresh on every theme switch).
+    private final Color gridColor = ThemeManager.theme() == Themes.dark ? Themes.GRID_COLOR_DARK : Themes.GRID_COLOR_LIGHT;
 
     CanvasController(Canva canva, HomeScreenViewModel viewModel) {
         this.canva = canva;
@@ -66,6 +80,7 @@ final class CanvasController {
         viewModel.selectedWidgetIdState().subscribe(this::applySelectionHighlight);
         setUpGrid();
         setUpGuides();
+        setUpResizeHandle();
         setUpDeleteKey();
     }
 
@@ -110,7 +125,7 @@ final class CanvasController {
         gc.clearRect(0, 0, width, height);
         if (!viewModel.showingGridState().get()) return;
 
-        gc.setStroke(GRID_COLOR);
+        gc.setStroke(gridColor);
         gc.setLineWidth(1);
         for (double x = 0; x <= width; x += GRID_SPACING) {
             gc.strokeLine(x, 0, x, height);
@@ -129,6 +144,75 @@ final class CanvasController {
         }
     }
 
+    /**
+     * One reusable handle (same "add once, reposition/show instead of
+     * rebuild" pattern as the two guide lines above) sitting at the selected
+     * widget's bottom-right corner — dragging it resizes that widget. Hidden
+     * whenever nothing's selected (see {@link #applySelectionHighlight}).
+     */
+    private void setUpResizeHandle() {
+        resizeHandle.setFill(Themes.SELECTION_HIGHLIGHT_COLOR);
+        resizeHandle.setStroke(Color.WHITE);
+        resizeHandle.setCursor(Cursor.SE_RESIZE);
+        resizeHandle.setVisible(false);
+        ((Pane) canva.getNode()).getChildren().add(resizeHandle);
+
+        double[] pressScenePos = new double[2];
+        double[] startSize = new double[2];
+
+        resizeHandle.setOnMousePressed(event -> {
+            Node node = selectedNode();
+            if (node == null) return;
+            pressScenePos[0] = event.getSceneX();
+            pressScenePos[1] = event.getSceneY();
+            startSize[0] = node.prefWidth(-1);
+            startSize[1] = node.prefHeight(-1);
+            event.consume();
+        });
+
+        resizeHandle.setOnMouseDragged(event -> {
+            Node node = selectedNode();
+            if (node == null) return;
+
+            double deltaX = event.getSceneX() - pressScenePos[0];
+            double deltaY = event.getSceneY() - pressScenePos[1];
+            double maxWidth = Math.max(MIN_WIDGET_SIZE, canvasWidth() - node.getLayoutX());
+            double maxHeight = Math.max(MIN_WIDGET_SIZE, canvasHeight() - node.getLayoutY());
+            double newWidth = clamp(startSize[0] + deltaX, MIN_WIDGET_SIZE, maxWidth);
+            double newHeight = clamp(startSize[1] + deltaY, MIN_WIDGET_SIZE, maxHeight);
+
+            WidgetViews.resize(node, newWidth, newHeight);
+            positionResizeHandle(node);
+            event.consume();
+        });
+
+        resizeHandle.setOnMouseReleased(event -> {
+            Node node = selectedNode();
+            if (node == null) return;
+
+            String selectedId = viewModel.selectedWidgetIdState().get();
+            double finalWidth = node.prefWidth(-1);
+            double finalHeight = node.prefHeight(-1);
+            viewModel.placedWidgets().updateIf(
+                    w -> w.id().equals(selectedId),
+                    w -> new PlacedWidget(w.id(), w.spec(), w.x(), w.y(), w.nickname(), finalWidth, finalHeight));
+            event.consume();
+        });
+
+        // Stops the click from bubbling to the Canva's background handler, which would deselect right after a resize.
+        resizeHandle.setOnMouseClicked(Event::consume);
+    }
+
+    private Node selectedNode() {
+        String selectedId = viewModel.selectedWidgetIdState().get();
+        return selectedId == null ? null : nodesById.get(selectedId);
+    }
+
+    private void positionResizeHandle(Node node) {
+        resizeHandle.setLayoutX(node.getLayoutX() + node.prefWidth(-1) - RESIZE_HANDLE_SIZE / 2);
+        resizeHandle.setLayoutY(node.getLayoutY() + node.prefHeight(-1) - RESIZE_HANDLE_SIZE / 2);
+    }
+
     void place(WidgetSpec spec, double centerX, double centerY) {
         SkinModel skin = viewModel.skinState().get();
         if (skin == null) return;
@@ -142,7 +226,7 @@ final class CanvasController {
         double x = clamp(centerX - width / 2, 0, Math.max(0, canvasWidth() - width));
         double y = clamp(centerY - height / 2, 0, Math.max(0, canvasHeight() - height));
 
-        finishPlacing(widget, spec, x, y, viewModel.nextWidgetId(), null);
+        finishPlacing(widget, spec, x, y, viewModel.nextWidgetId(), null, null, null);
     }
 
     /** Clears the canvas and re-places every widget from {@code widgets} at its saved (x, y) — used by "Load Layout". */
@@ -155,16 +239,19 @@ final class CanvasController {
 
         for (PlacedWidget widget : widgets) {
             Component component = WidgetViews.build(skin, atlasImage, widget.spec());
-            finishPlacing(component, widget.spec(), widget.x(), widget.y(), widget.id(), widget.nickname());
+            finishPlacing(component, widget.spec(), widget.x(), widget.y(), widget.id(), widget.nickname(),
+                    widget.width(), widget.height());
         }
     }
 
-    /** Removes every widget currently on the canvas (the grid and the two guide lines aren't widgets, and stay). */
+    /** Removes every widget currently on the canvas (the grid, the two guide lines, and the resize handle aren't widgets, and stay). */
     void clear() {
         ((Pane) canva.getNode()).getChildren().removeIf(
-                node -> node != gridCanvas && node != verticalCenterGuide && node != horizontalCenterGuide);
+                node -> node != gridCanvas && node != verticalCenterGuide && node != horizontalCenterGuide && node != resizeHandle);
         viewModel.placedWidgets().clear();
         nodesById.clear();
+        textNodesById.clear();
+        baseFontSizeById.clear();
         viewModel.selectedWidgetIdState().set(null);
     }
 
@@ -172,7 +259,135 @@ final class CanvasController {
     void setNickname(String widgetId, String nicknameOrNull) {
         viewModel.placedWidgets().updateIf(
                 w -> w.id().equals(widgetId),
-                w -> new PlacedWidget(w.id(), w.spec(), w.x(), w.y(), nicknameOrNull));
+                w -> new PlacedWidget(w.id(), w.spec(), w.x(), w.y(), nicknameOrNull, w.width(), w.height()));
+    }
+
+    /**
+     * Sets a placed {@code TextButtonSpec}/{@code LabelSpec} widget's text —
+     * called live as the user types in the "Properties" panel's "Text:"
+     * field, same as {@link #setNickname}. A no-op for any other widget kind
+     * (its spec has no {@code text} to replace).
+     */
+    void setText(String widgetId, String newText) {
+        viewModel.placedWidgets().updateIf(
+                w -> w.id().equals(widgetId),
+                w -> switch (w.spec()) {
+                    case WidgetSpec.TextButtonSpec s -> new PlacedWidget(
+                            w.id(), new WidgetSpec.TextButtonSpec(s.styleName(), newText, s.fontColor(), s.fontScale()), w.x(), w.y(), w.nickname(), w.width(), w.height());
+                    case WidgetSpec.LabelSpec s -> new PlacedWidget(
+                            w.id(), new WidgetSpec.LabelSpec(s.styleName(), newText, s.fontColor(), s.fontScale()), w.x(), w.y(), w.nickname(), w.width(), w.height());
+                    default -> w;
+                });
+
+        Text textNode = textNodesById.get(widgetId);
+        if (textNode != null) {
+            textNode.setText(newText);
+        }
+    }
+
+    /**
+     * Sets a placed {@code TextButtonSpec}/{@code LabelSpec} widget's font
+     * color (a {@code #rrggbb}/{@code #rrggbbaa} hex string), or clears the
+     * override (back to the skin style's own color) when {@code null} —
+     * same "Properties" panel live-as-you-type wiring as {@link #setText}. A
+     * no-op for any other widget kind, or for an invalid hex string (the
+     * field should already have rejected it before calling this, but this
+     * guards the live node update too).
+     */
+    void setFontColor(String widgetId, String hexColorOrNull) {
+        if (hexColorOrNull != null) {
+            try {
+                Color.web(hexColorOrNull);
+            } catch (IllegalArgumentException e) {
+                return;
+            }
+        }
+
+        PlacedWidget current = findPlacedWidget(widgetId);
+        if (current == null) return;
+        WidgetSpec newSpec = switch (current.spec()) {
+            case WidgetSpec.TextButtonSpec s -> new WidgetSpec.TextButtonSpec(s.styleName(), s.text(), hexColorOrNull, s.fontScale());
+            case WidgetSpec.LabelSpec s -> new WidgetSpec.LabelSpec(s.styleName(), s.text(), hexColorOrNull, s.fontScale());
+            default -> null;
+        };
+        if (newSpec == null) return;
+
+        viewModel.placedWidgets().updateIf(
+                w -> w.id().equals(widgetId),
+                w -> new PlacedWidget(w.id(), newSpec, w.x(), w.y(), w.nickname(), w.width(), w.height()));
+
+        Text textNode = textNodesById.get(widgetId);
+        if (textNode == null) return;
+        SkinModel skin = viewModel.skinState().get();
+        Color resolved = hexColorOrNull != null ? Color.web(hexColorOrNull)
+                : skin == null ? Color.BLACK : WidgetViews.skinFontColor(newSpec, skin);
+        textNode.setFill(resolved);
+    }
+
+    /**
+     * Sets a placed {@code TextButtonSpec}/{@code LabelSpec} widget's font
+     * scale (a multiplier on the skin's own font size — maps directly onto
+     * libGDX's own {@code Label.setFontScale}), or clears the override (back
+     * to the skin's own size, scale 1.0) when {@code null}. Always applied
+     * against {@link #baseFontSizeById}'s stored *unscaled* size, not the
+     * text node's current (possibly already-scaled) font size — otherwise
+     * repeated edits would compound (e.g. scale 2.0 then scale 1.5 would
+     * apply 1.5x on top of the already-doubled size instead of 1.5x on the
+     * original).
+     */
+    void setFontScale(String widgetId, Double scaleOrNull) {
+        PlacedWidget current = findPlacedWidget(widgetId);
+        if (current == null) return;
+        WidgetSpec newSpec = switch (current.spec()) {
+            case WidgetSpec.TextButtonSpec s -> new WidgetSpec.TextButtonSpec(s.styleName(), s.text(), s.fontColor(), scaleOrNull);
+            case WidgetSpec.LabelSpec s -> new WidgetSpec.LabelSpec(s.styleName(), s.text(), s.fontColor(), scaleOrNull);
+            default -> null;
+        };
+        if (newSpec == null) return;
+
+        viewModel.placedWidgets().updateIf(
+                w -> w.id().equals(widgetId),
+                w -> new PlacedWidget(w.id(), newSpec, w.x(), w.y(), w.nickname(), w.width(), w.height()));
+
+        Text textNode = textNodesById.get(widgetId);
+        Double baseSize = baseFontSizeById.get(widgetId);
+        if (textNode == null || baseSize == null) return;
+        double scale = scaleOrNull != null ? scaleOrNull : 1.0;
+        textNode.setFont(Font.font(textNode.getFont().getFamily(), baseSize * scale));
+    }
+
+    private PlacedWidget findPlacedWidget(String widgetId) {
+        return viewModel.placedWidgets().get().stream()
+                .filter(w -> w.id().equals(widgetId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Sets a placed widget's size directly to ({@code width}, {@code height}) —
+     * the "Properties" panel's Width/Height fields' write path, same clamping
+     * (minimum size, stays inside the canvas from the widget's current x/y)
+     * and end result as dragging the resize handle there. Also keeps the
+     * handle glued to the new corner if this widget happens to be selected,
+     * same as {@link #setUpResizeHandle}'s own drag handler.
+     */
+    void setSize(String widgetId, double width, double height) {
+        Node node = nodesById.get(widgetId);
+        if (node == null) return;
+
+        double maxWidth = Math.max(MIN_WIDGET_SIZE, canvasWidth() - node.getLayoutX());
+        double maxHeight = Math.max(MIN_WIDGET_SIZE, canvasHeight() - node.getLayoutY());
+        double clampedWidth = clamp(width, MIN_WIDGET_SIZE, maxWidth);
+        double clampedHeight = clamp(height, MIN_WIDGET_SIZE, maxHeight);
+
+        WidgetViews.resize(node, clampedWidth, clampedHeight);
+        if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
+            positionResizeHandle(node);
+        }
+
+        viewModel.placedWidgets().updateIf(
+                w -> w.id().equals(widgetId),
+                w -> new PlacedWidget(w.id(), w.spec(), w.x(), w.y(), w.nickname(), clampedWidth, clampedHeight));
     }
 
     /** Removes one widget from the canvas — wired to Delete/Backspace in {@link #setUpDeleteKey}, but plain enough to call directly (tests, future "Remove" menu item, etc). */
@@ -181,6 +396,8 @@ final class CanvasController {
         if (node == null) return;
 
         ((Pane) canva.getNode()).getChildren().remove(node);
+        textNodesById.remove(widgetId);
+        baseFontSizeById.remove(widgetId);
         viewModel.placedWidgets().removeIf(w -> w.id().equals(widgetId));
 
         if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
@@ -191,6 +408,11 @@ final class CanvasController {
     /** The JavaFX node for a placed widget id, or null — used by tests instead of indexing into the Canva's Pane children (which also holds the guide lines). */
     Node nodeFor(String widgetId) {
         return nodesById.get(widgetId);
+    }
+
+    /** The live editable {@link Text} for a placed {@code TextButtonSpec}/{@code LabelSpec} widget, or null (tests only). */
+    Node textNodeFor(String widgetId) {
+        return textNodesById.get(widgetId);
     }
 
     Line verticalCenterGuide() {
@@ -205,11 +427,37 @@ final class CanvasController {
         return gridCanvas;
     }
 
-    private void finishPlacing(Component component, WidgetSpec spec, double x, double y, String id, String nickname) {
+    /** Whichever grid color got picked for the theme active when this controller was built (tests only — {@link GraphicsContext} has no way to read a stroke color back after drawing with it). */
+    Color gridColor() {
+        return gridColor;
+    }
+
+    Rectangle resizeHandle() {
+        return resizeHandle;
+    }
+
+    private void finishPlacing(Component component, WidgetSpec spec, double x, double y, String id, String nickname,
+                                Double width, Double height) {
         Node node = component.getNode();
+        if (width != null && height != null) {
+            WidgetViews.resize(node, width, height);
+        }
         canva.child(component, x, y);
         nodesById.put(id, node);
-        viewModel.placedWidgets().add(new PlacedWidget(id, spec, x, y, nickname));
+        Text textNode = WidgetViews.textNodeOf(node);
+        if (textNode != null) {
+            textNodesById.put(id, textNode);
+            // Recover the *unscaled* base size even if this spec already carries a
+            // fontScale (restoring a saved layout) - WidgetViews.build() already applied
+            // it, so the node's current size divided by that same scale is the base.
+            double currentScale = switch (spec) {
+                case WidgetSpec.TextButtonSpec s -> s.fontScale() != null ? s.fontScale() : 1.0;
+                case WidgetSpec.LabelSpec s -> s.fontScale() != null ? s.fontScale() : 1.0;
+                default -> 1.0;
+            };
+            baseFontSizeById.put(id, textNode.getFont().getSize() / currentScale);
+        }
+        viewModel.placedWidgets().add(new PlacedWidget(id, spec, x, y, nickname, width, height));
         makeMovable(node, id);
     }
 
@@ -243,6 +491,9 @@ final class CanvasController {
 
             node.setLayoutX(newX);
             node.setLayoutY(newY);
+            if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
+                positionResizeHandle(node);
+            }
             event.consume();
         });
 
@@ -250,7 +501,7 @@ final class CanvasController {
             hideGuides();
             viewModel.placedWidgets().updateIf(
                     w -> w.id().equals(widgetId),
-                    w -> new PlacedWidget(w.id(), w.spec(), node.getLayoutX(), node.getLayoutY(), w.nickname()));
+                    w -> new PlacedWidget(w.id(), w.spec(), node.getLayoutX(), node.getLayoutY(), w.nickname(), w.width(), w.height()));
             event.consume();
         });
 
@@ -300,6 +551,15 @@ final class CanvasController {
 
     private void applySelectionHighlight(String selectedId) {
         nodesById.forEach((id, node) -> node.setEffect(id.equals(selectedId) ? SELECTION_HIGHLIGHT : null));
+
+        Node selected = selectedNode();
+        if (selected == null) {
+            resizeHandle.setVisible(false);
+            return;
+        }
+        positionResizeHandle(selected);
+        resizeHandle.setVisible(true);
+        resizeHandle.toFront();
     }
 
     private double canvasWidth() {

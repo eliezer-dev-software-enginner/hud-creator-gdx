@@ -2,6 +2,7 @@ package my_app;
 
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
+import javafx.scene.Node;
 import javafx.scene.layout.Region;
 import megalodonte.components.layout_components.Canva;
 import my_app.project.UiLayoutReader;
@@ -48,9 +49,9 @@ class HomeScreenViewModelLoadLayoutTest {
             exportingViewModel.canvasHeightState().set(240);
             exportingViewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
             exportingViewModel.placedWidgets().add(new PlacedWidget(
-                    "widget-1", new WidgetSpec.TextButtonSpec("default", "Play"), 10, 20, "play"));
+                    "widget-1", new WidgetSpec.TextButtonSpec("default", "Play"), 10, 20, "play", null, null));
             exportingViewModel.placedWidgets().add(new PlacedWidget(
-                    "widget-2", new WidgetSpec.ImageSpec("arrow"), 30, 40, null));
+                    "widget-2", new WidgetSpec.ImageSpec("arrow"), 30, 40, null, 64.0, 24.0));
 
             Path outputFile = tempDir.resolve("ui/hud.json");
             exportingViewModel.exportTo(outputFile);
@@ -77,10 +78,15 @@ class HomeScreenViewModelLoadLayoutTest {
             assertEquals(10, widgets.get(0).x());
             assertEquals(20, widgets.get(0).y());
             assertEquals(null, widgets.get(1).nickname());
+            assertEquals(64.0, widgets.get(1).width(), "a resized widget's size should round-trip through Load Layout too");
+            assertEquals(24.0, widgets.get(1).height());
 
             // Actually landed on the Canva, not just in the model.
             assertTrue(controller.nodeFor(widgets.get(0).id()) != null);
-            assertTrue(controller.nodeFor(widgets.get(1).id()) != null);
+            Node resizedNode = controller.nodeFor(widgets.get(1).id());
+            assertTrue(resizedNode != null);
+            assertEquals(64.0, resizedNode.prefWidth(-1), "the resized node itself, not just the model, should reflect the saved size");
+            assertEquals(24.0, resizedNode.prefHeight(-1));
 
             // New widgets dragged in after loading shouldn't collide with the loaded ids.
             assertEquals("widget-3", loadingViewModel.nextWidgetId());
@@ -95,7 +101,7 @@ class HomeScreenViewModelLoadLayoutTest {
             exportingViewModel.canvasHeightState().set(180);
             exportingViewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
             exportingViewModel.placedWidgets().add(new PlacedWidget(
-                    "widget-1", new WidgetSpec.ButtonSpec("default"), 5, 5, null));
+                    "widget-1", new WidgetSpec.ButtonSpec("default"), 5, 5, null, null, null));
 
             Path outputFile = tempDir.resolve("project.json");
             exportingViewModel.exportTo(outputFile);
@@ -109,7 +115,7 @@ class HomeScreenViewModelLoadLayoutTest {
             // with no FileChooser/Stage involved (handleSave() would NPE on
             // MegalodonteApp.getCurrentContext() if it fell through to the dialog branch).
             loadingViewModel.placedWidgets().add(new PlacedWidget(
-                    "widget-2", new WidgetSpec.ImageSpec("arrow"), 50, 50, null));
+                    "widget-2", new WidgetSpec.ImageSpec("arrow"), 50, 50, null, null, null));
             loadingViewModel.handleSave();
 
             assertTrue(loadingViewModel.statusMessageState().get().startsWith("Project saved to"),

@@ -110,6 +110,14 @@ public class Themes {
     /** Center-alignment guide lines shown while dragging a widget on the Canva. */
     public static final Color GUIDE_COLOR = Color.web("#ff4081");
 
-    /** Faint grid overlay drawn on the Canva when the "Grid" checkbox is on. */
-    public static final Color GRID_COLOR = Color.rgb(0, 0, 0, 0.08);
+    /**
+     * Faint grid overlay drawn on the Canva when the "Grid" checkbox is on —
+     * separate light/dark variants (dark black-on-near-black at the same low
+     * opacity used for light mode was reported as basically invisible; white
+     * needs the opacity itself a bit higher too, since a bright color read as
+     * faint against a light background reads as barely-there against a dark
+     * one at the exact same alpha).
+     */
+    public static final Color GRID_COLOR_LIGHT = Color.rgb(0, 0, 0, 0.08);
+    public static final Color GRID_COLOR_DARK = Color.rgb(255, 255, 255, 0.14);
 }

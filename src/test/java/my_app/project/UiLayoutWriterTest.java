@@ -20,7 +20,7 @@ class UiLayoutWriterTest {
     @Test
     void writesReadableJsonWithExpectedShape(@TempDir Path tempDir) throws Exception {
         List<PlacedWidget> widgets = List.of(
-                new PlacedWidget("widget-1", new WidgetSpec.ButtonSpec("default"), 10, 20, null)
+                new PlacedWidget("widget-1", new WidgetSpec.ButtonSpec("default"), 10, 20, null, null, null)
         );
         UiLayout layout = UiLayoutAssembler.assemble("skin/skin.json", 640, 360, null, widgets);
 
