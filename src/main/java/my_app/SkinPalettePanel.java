@@ -11,6 +11,7 @@ import megalodonte.base.components.Component;
 import megalodonte.base.state.ReadableState;
 import megalodonte.base.theme.ThemeInterface;
 import megalodonte.base.state.State;
+import megalodonte.components.TextFlow;
 import megalodonte.components.v2.Scroll;
 import megalodonte.components.SpacerHorizontal;
 import megalodonte.components.Text;
@@ -67,10 +68,10 @@ final class SkinPalettePanel {
         ReadableState<Boolean> hasError = viewModel.loadErrorState().map(error -> error != null);
         ReadableState<Boolean> hasSkin = viewModel.skinState().map(skin -> skin != null);
 
-        Component errorText = new Text(
+        Component errorText = new TextFlow(new Text(
                 viewModel.loadErrorState().map(error -> error == null ? "" : error),
-                new TextProps().color(Themes.ERROR_TEXT_COLOR));
-        Component noSkinText = new Text("No skin loaded. Use Options → Load Skin.");
+                new TextProps().color(Themes.ERROR_TEXT_COLOR)));
+        Component noSkinText = new TextFlow(new Text("No skin loaded. Use Options → Load Skin."));
 
         Component body = Show.when(hasError,
                 () -> errorText,
