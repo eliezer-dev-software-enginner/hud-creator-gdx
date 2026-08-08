@@ -2,11 +2,9 @@ package my_app;
 
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
-import javafx.scene.Node;
-import javafx.scene.layout.StackPane;
-import javafx.scene.text.Text;
 import megalodonte.components.layout_components.Canva;
 import my_app.skin.SkinLoader;
+import my_app.skin.render.BitmapTextView;
 import my_app.widget.WidgetSpec;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -23,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * is the "Properties" panel's "Text:" field's write path, mirroring the
  * existing {@link CanvasController#setNickname}. Verifies both halves of the
  * fix: the stored {@link my_app.widget.PlacedWidget}'s spec, and the actual
- * on-screen {@link Text} node - a bug in either one alone would still show
- * up as "editing text doesn't work" to the user.
+ * on-screen {@link BitmapTextView} - a bug in either one alone would still
+ * show up as "editing text doesn't work" to the user.
  */
 class CanvasControllerTextEditTest {
 
@@ -57,9 +55,8 @@ class CanvasControllerTextEditTest {
             assertEquals("Jogar", spec.text());
             assertEquals("default", spec.styleName(), "styleName shouldn't change");
 
-            Node node = controller.nodeFor(id);
-            Text textNode = (Text) ((StackPane) node).getChildren().get(1);
-            assertEquals("Jogar", textNode.getText());
+            BitmapTextView textView = controller.textViewFor(id);
+            assertEquals("Jogar", textView.text());
         });
     }
 
@@ -79,9 +76,8 @@ class CanvasControllerTextEditTest {
             var spec = (WidgetSpec.LabelSpec) viewModel.placedWidgets().get().get(0).spec();
             assertEquals("Vidas", spec.text());
 
-            Node node = controller.nodeFor(id);
-            Text textNode = (Text) ((StackPane) node).getChildren().get(0);
-            assertEquals("Vidas", textNode.getText());
+            BitmapTextView textView = controller.textViewFor(id);
+            assertEquals("Vidas", textView.text());
         });
     }
 

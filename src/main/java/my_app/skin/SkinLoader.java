@@ -1,5 +1,7 @@
 package my_app.skin;
 
+import my_app.gdx.GdxFontLoader;
+
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -42,14 +44,29 @@ public final class SkinLoader {
                 regionsByName.put(region.name(), region);
             }
 
+            Map<String, GdxFontLoader.LoadedFont> fonts = new LinkedHashMap<>();
+            for (var entry : parsedJson.fontFiles().entrySet()) {
+                Path fntFile = dir.resolve(entry.getValue());
+                String regionName = stripExtension(fntFile.getFileName().toString());
+                try {
+                    fonts.put(entry.getKey(), GdxFontLoader.load(atlasPath, fntFile, regionName));
+                } catch (RuntimeException ignored) {
+                    // Missing/unparseable .fnt, or its glyph region isn't in the atlas -
+                    // BitmapTextView falls back to a plain rendering for this font,
+                    // same graceful-degradation convention as every other lookup here.
+                }
+            }
+
             return new SkinModel(
                     skinJsonPath,
+                    atlasPath,
                     imagePath,
                     regionsByName,
                     parsedJson.colors(),
                     parsedJson.fontFiles(),
                     parsedJson.styles(),
-                    parsedJson.tintedDrawables()
+                    parsedJson.tintedDrawables(),
+                    fonts
             );
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read skin at " + skinJsonPath, e);

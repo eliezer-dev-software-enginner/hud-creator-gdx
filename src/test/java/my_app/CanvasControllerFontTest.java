@@ -3,9 +3,9 @@ package my_app;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Text;
 import megalodonte.components.layout_components.Canva;
 import my_app.skin.SkinLoader;
+import my_app.skin.render.BitmapTextView;
 import my_app.widget.WidgetSpec;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -18,13 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Font color/size used to be fixed at whatever the skin style (color) or
- * JavaFX default (size - the skin has no size concept at all for a preview
- * Text) resolved to, with no way to change either after placement.
- * {@link CanvasController#setFontColor}/{@link CanvasController#setFontScale}
- * are the "Properties" panel's "Font:" row's write path, mirroring
+ * Font color used to be fixed at whatever the skin style resolved to, with no
+ * way to change it after placement. {@link CanvasController#setFontColor} is
+ * the "Properties" panel's "Font:" row's write path, mirroring
  * {@link CanvasController#setText} — verifies both halves again: the stored
- * spec, and the actual live {@link Text} node.
+ * spec, and the actual live {@link BitmapTextView}.
  */
 class CanvasControllerFontTest {
 
@@ -52,8 +50,8 @@ class CanvasControllerFontTest {
             var spec = (WidgetSpec.TextButtonSpec) viewModel.placedWidgets().get().get(0).spec();
             assertEquals("#ff0000", spec.fontColor());
 
-            Text textNode = (Text) controller.textNodeFor(id);
-            assertEquals(Color.web("#ff0000"), textNode.getFill());
+            BitmapTextView textView = controller.textViewFor(id);
+            assertEquals(Color.web("#ff0000"), textView.color());
         });
     }
 
@@ -67,15 +65,15 @@ class CanvasControllerFontTest {
 
             controller.place(new WidgetSpec.TextButtonSpec("default", "Play"), 60, 40);
             String id = viewModel.placedWidgets().get().get(0).id();
-            Text textNode = (Text) controller.textNodeFor(id);
-            Color skinDefault = textNode.getFill() instanceof Color c ? c : null;
+            BitmapTextView textView = controller.textViewFor(id);
+            Color skinDefault = textView.color();
 
             controller.setFontColor(id, "#ff0000");
             controller.setFontColor(id, null);
 
             var spec = (WidgetSpec.TextButtonSpec) viewModel.placedWidgets().get().get(0).spec();
             assertNull(spec.fontColor());
-            assertEquals(skinDefault, textNode.getFill());
+            assertEquals(skinDefault, textView.color());
         });
     }
 
@@ -98,70 +96,6 @@ class CanvasControllerFontTest {
     }
 
     @Test
-    void setFontScaleResizesTheLiveTextRelativeToTheOriginalSize() throws Exception {
-        runOnFxThreadAndWait(() -> {
-            HomeScreenViewModel viewModel = new HomeScreenViewModel();
-            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
-            CanvasController controller = new CanvasController(new Canva(), viewModel);
-            viewModel.attachCanvasController(controller);
-
-            controller.place(new WidgetSpec.TextButtonSpec("default", "Play"), 60, 40);
-            String id = viewModel.placedWidgets().get().get(0).id();
-            Text textNode = (Text) controller.textNodeFor(id);
-            double baseSize = textNode.getFont().getSize();
-
-            controller.setFontScale(id, 2.0);
-            assertEquals(baseSize * 2, textNode.getFont().getSize(), 0.01);
-
-            var spec = (WidgetSpec.TextButtonSpec) viewModel.placedWidgets().get().get(0).spec();
-            assertEquals(2.0, spec.fontScale());
-        });
-    }
-
-    @Test
-    void repeatedScaleEditsDontCompound() throws Exception {
-        runOnFxThreadAndWait(() -> {
-            HomeScreenViewModel viewModel = new HomeScreenViewModel();
-            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
-            CanvasController controller = new CanvasController(new Canva(), viewModel);
-            viewModel.attachCanvasController(controller);
-
-            controller.place(new WidgetSpec.TextButtonSpec("default", "Play"), 60, 40);
-            String id = viewModel.placedWidgets().get().get(0).id();
-            Text textNode = (Text) controller.textNodeFor(id);
-            double baseSize = textNode.getFont().getSize();
-
-            controller.setFontScale(id, 2.0);
-            controller.setFontScale(id, 1.5);
-
-            // Must be 1.5x the ORIGINAL size, not 1.5x the already-doubled size (2.25x).
-            assertEquals(baseSize * 1.5, textNode.getFont().getSize(), 0.01);
-        });
-    }
-
-    @Test
-    void clearingTheFontScaleRevertsToTheOriginalSize() throws Exception {
-        runOnFxThreadAndWait(() -> {
-            HomeScreenViewModel viewModel = new HomeScreenViewModel();
-            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
-            CanvasController controller = new CanvasController(new Canva(), viewModel);
-            viewModel.attachCanvasController(controller);
-
-            controller.place(new WidgetSpec.TextButtonSpec("default", "Play"), 60, 40);
-            String id = viewModel.placedWidgets().get().get(0).id();
-            Text textNode = (Text) controller.textNodeFor(id);
-            double baseSize = textNode.getFont().getSize();
-
-            controller.setFontScale(id, 2.0);
-            controller.setFontScale(id, null);
-
-            assertEquals(baseSize, textNode.getFont().getSize(), 0.01);
-            var spec = (WidgetSpec.TextButtonSpec) viewModel.placedWidgets().get().get(0).spec();
-            assertNull(spec.fontScale());
-        });
-    }
-
-    @Test
     void editingTextDoesNotResetAPreviousFontOverride() throws Exception {
         runOnFxThreadAndWait(() -> {
             HomeScreenViewModel viewModel = new HomeScreenViewModel();
@@ -173,13 +107,11 @@ class CanvasControllerFontTest {
             String id = viewModel.placedWidgets().get().get(0).id();
 
             controller.setFontColor(id, "#ff0000");
-            controller.setFontScale(id, 2.0);
             controller.setText(id, "Jogar");
 
             var spec = (WidgetSpec.TextButtonSpec) viewModel.placedWidgets().get().get(0).spec();
             assertEquals("Jogar", spec.text());
             assertEquals("#ff0000", spec.fontColor(), "editing text shouldn't clear a previously-set font color");
-            assertEquals(2.0, spec.fontScale(), "editing text shouldn't clear a previously-set font scale");
         });
     }
 

@@ -19,7 +19,7 @@ class UiLayoutAssemblerTest {
         List<PlacedWidget> widgets = List.of(
                 new PlacedWidget("widget-1", new WidgetSpec.ImageSpec("arrow"), 1, 2, null, null, null),
                 new PlacedWidget("widget-2", new WidgetSpec.ButtonSpec("default"), 3, 4, null, null, null),
-                new PlacedWidget("widget-3", new WidgetSpec.TextButtonSpec("default", "Play", "#ff0000", 1.5), 5, 6, "play", null, null),
+                new PlacedWidget("widget-3", new WidgetSpec.TextButtonSpec("default", "Play", "#ff0000"), 5, 6, "play", null, null),
                 new PlacedWidget("widget-4", new WidgetSpec.LabelSpec("default", "Lives"), 7, 8, null, 120.0, 40.0)
         );
 
@@ -54,7 +54,6 @@ class UiLayoutAssemblerTest {
         assertEquals("Play", textButton.text());
         assertEquals("play", textButton.nickname());
         assertEquals("#ff0000", textButton.fontColor(), "a font color override should make it into the DTO");
-        assertEquals(1.5, textButton.fontScale());
 
         PlacedWidgetDto label = layout.widgets().get(3);
         assertEquals("label", label.type());
@@ -63,14 +62,13 @@ class UiLayoutAssemblerTest {
         assertNull(label.nickname());
         assertEquals(120.0, label.width(), "a resized widget's dimensions should make it into the DTO");
         assertEquals(40.0, label.height());
-        assertNull(label.fontColor(), "never-overridden font color/scale shouldn't carry into the JSON");
-        assertNull(label.fontScale());
+        assertNull(label.fontColor(), "never-overridden font color shouldn't carry into the JSON");
     }
 
     @Test
     void fromDtoIsTheInverseOfToDto() {
         PlacedWidget original = new PlacedWidget(
-                "widget-3", new WidgetSpec.TextButtonSpec("default", "Play", "#00ff00", 0.75), 5, 6, "play", 100.0, 32.0);
+                "widget-3", new WidgetSpec.TextButtonSpec("default", "Play", "#00ff00"), 5, 6, "play", 100.0, 32.0);
 
         UiLayout layout = UiLayoutAssembler.assemble("skin/skin.json", 640, 360, null, List.of(original));
         PlacedWidget roundTripped = UiLayoutAssembler.fromDto(layout.widgets().get(0));

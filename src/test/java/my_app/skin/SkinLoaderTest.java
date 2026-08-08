@@ -73,5 +73,14 @@ class SkinLoaderTest {
 
         assertTrue(skin.fontFile("font").isPresent());
         assertTrue(skin.fontFile("font").get().endsWith(".fnt"));
+        assertEquals(19, skin.font("font").orElseThrow().fontData().lineHeight);
+    }
+
+    @Test
+    void keepsTheAtlasFilesOwnPathAlongsideTheImage() {
+        SkinModel skin = SkinLoader.load(EXAMPLE_SKIN);
+
+        assertTrue(skin.atlasPath().toString().endsWith(".atlas"));
+        assertTrue(skin.atlasPath().toFile().isFile());
     }
 }

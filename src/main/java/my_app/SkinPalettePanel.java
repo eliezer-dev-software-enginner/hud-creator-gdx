@@ -203,22 +203,15 @@ final class SkinPalettePanel {
     }
 
     /**
-     * A live-editable "Font:" row (color hex + scale multiplier, side by
-     * side) for a {@code TextButtonSpec}/{@code LabelSpec} widget, or null
-     * for the other kinds — same "blank clears the override, back to the
-     * skin's own font" convention as "Nickname:". {@code fontScale} is a
-     * multiplier (1 = the skin's own size, not an absolute point size) —
-     * see {@link WidgetSpec.TextButtonSpec}'s own Javadoc for why.
+     * A live-editable "Font:" row (color hex) for a {@code TextButtonSpec}/
+     * {@code LabelSpec} widget, or null for the other kinds — same "blank
+     * clears the override, back to the skin's own font" convention as
+     * "Nickname:".
      */
     private Component buildFontRow(PlacedWidget widget) {
         String currentColor = switch (widget.spec()) {
             case WidgetSpec.TextButtonSpec s -> s.fontColor();
             case WidgetSpec.LabelSpec s -> s.fontColor();
-            default -> null;
-        };
-        Double currentScale = switch (widget.spec()) {
-            case WidgetSpec.TextButtonSpec s -> s.fontScale();
-            case WidgetSpec.LabelSpec s -> s.fontScale();
             default -> null;
         };
         if (!(widget.spec() instanceof WidgetSpec.TextButtonSpec) && !(widget.spec() instanceof WidgetSpec.LabelSpec)) {
@@ -233,28 +226,7 @@ final class SkinPalettePanel {
                     return OnChangeResult.same(value);
                 });
 
-        String defaultScaleText = formatScale(currentScale == null ? 1.0 : currentScale);
-        Component scaleInput = new Input(State.of(defaultScaleText), new InputProps().width(40))
-                .onChange(value -> {
-                    if (value.isBlank()) {
-                        canvasController.setFontScale(widget.id(), null);
-                        return OnChangeResult.same(value);
-                    }
-                    Double parsed = parseSize(value);
-                    if (parsed == null) {
-                        return OnChangeResult.same(defaultScaleText);
-                    }
-                    canvasController.setFontScale(widget.id(), parsed);
-                    return OnChangeResult.same(value);
-                });
-
-        return new Row().children(
-                new Text("Font:"), new SpacerHorizontal(6),
-                colorInput, new SpacerHorizontal(6), scaleInput, new Text("x"));
-    }
-
-    private static String formatScale(double value) {
-        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+        return new Row().children(new Text("Font:"), new SpacerHorizontal(6), colorInput);
     }
 
     /**
@@ -263,11 +235,17 @@ final class SkinPalettePanel {
      * resize handle, for exact values instead of eyeballing it. Reads the
      * live node's actual current size (not {@code widget.width()/height()},
      * which is {@code null} until the widget's ever been resized at all) so
-     * it always starts from what's really on screen. Or null if the widget's
+     * it always starts from what's really on screen. Null if the widget's
      * node can't be found (shouldn't happen for a selected widget, but
-     * {@link CanvasController#setSize} already guards the same way).
+     * {@link CanvasController#setSize} already guards the same way), or for
+     * a {@code LabelSpec} ("Texto") - same reasoning as the Canva's own
+     * resize handle (see {@link CanvasController#isResizable}): its
+     * {@code BitmapTextView} canvas is always exactly glyph-sized and never
+     * reflows, so resizing its invisible wrapper box has no visible effect.
      */
     private Component buildSizeRow(PlacedWidget widget) {
+        if (widget.spec() instanceof WidgetSpec.LabelSpec) return null;
+
         Node node = canvasController.nodeFor(widget.id());
         if (node == null) return null;
 

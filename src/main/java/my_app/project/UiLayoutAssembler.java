@@ -47,13 +47,13 @@ public final class UiLayoutAssembler {
     private static PlacedWidgetDto toDto(PlacedWidget widget) {
         return switch (widget.spec()) {
             case WidgetSpec.ImageSpec s -> new PlacedWidgetDto(
-                    widget.id(), "image", null, s.regionName(), null, widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), null, null);
+                    widget.id(), "image", null, s.regionName(), null, widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), null);
             case WidgetSpec.ButtonSpec s -> new PlacedWidgetDto(
-                    widget.id(), "button", s.styleName(), null, null, widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), null, null);
+                    widget.id(), "button", s.styleName(), null, null, widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), null);
             case WidgetSpec.TextButtonSpec s -> new PlacedWidgetDto(
-                    widget.id(), "textButton", s.styleName(), null, s.text(), widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), s.fontColor(), s.fontScale());
+                    widget.id(), "textButton", s.styleName(), null, s.text(), widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), s.fontColor());
             case WidgetSpec.LabelSpec s -> new PlacedWidgetDto(
-                    widget.id(), "label", s.styleName(), null, s.text(), widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), s.fontColor(), s.fontScale());
+                    widget.id(), "label", s.styleName(), null, s.text(), widget.x(), widget.y(), widget.nickname(), widget.width(), widget.height(), s.fontColor());
         };
     }
 
@@ -62,8 +62,8 @@ public final class UiLayoutAssembler {
         WidgetSpec spec = switch (dto.type()) {
             case "image" -> new WidgetSpec.ImageSpec(dto.regionName());
             case "button" -> new WidgetSpec.ButtonSpec(dto.styleName());
-            case "textButton" -> new WidgetSpec.TextButtonSpec(dto.styleName(), dto.text(), dto.fontColor(), dto.fontScale());
-            case "label" -> new WidgetSpec.LabelSpec(dto.styleName(), dto.text(), dto.fontColor(), dto.fontScale());
+            case "textButton" -> new WidgetSpec.TextButtonSpec(dto.styleName(), dto.text(), dto.fontColor());
+            case "label" -> new WidgetSpec.LabelSpec(dto.styleName(), dto.text(), dto.fontColor());
             default -> throw new IllegalArgumentException("Unknown widget type: \"" + dto.type() + "\"");
         };
         return new PlacedWidget(dto.id(), spec, dto.x(), dto.y(), dto.nickname(), dto.width(), dto.height());

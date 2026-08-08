@@ -1,0 +1,53 @@
+{
+  "formatVersion" : 1,
+  "skinPath" : "../../gdx-skins/comic/skin/comic-ui.json",
+  "canvasWidth" : 640,
+  "canvasHeight" : 360,
+  "widgets" : [ {
+    "id" : "widget-1",
+    "type" : "label",
+    "styleName" : "title",
+    "text" : "Crystal rift",
+    "x" : 177.5,
+    "y" : 17.0
+  }, {
+    "id" : "widget-4",
+    "type" : "button",
+    "styleName" : "default",
+    "x" : 245.0,
+    "y" : 108.0
+  }, {
+    "id" : "widget-5",
+    "type" : "label",
+    "styleName" : "alt",
+    "text" : "New game",
+    "x" : 287.0,
+    "y" : 125.0
+  }, {
+    "id" : "widget-6",
+    "type" : "button",
+    "styleName" : "default",
+    "x" : 245.0,
+    "y" : 172.0
+  }, {
+    "id" : "widget-8",
+    "type" : "label",
+    "styleName" : "alt",
+    "text" : "Load game",
+    "x" : 292.5,
+    "y" : 191.0
+  }, {
+    "id" : "widget-10",
+    "type" : "button",
+    "styleName" : "default",
+    "x" : 245.0,
+    "y" : 237.0
+  }, {
+    "id" : "widget-11",
+    "type" : "label",
+    "styleName" : "alt",
+    "text" : "Options",
+    "x" : 293.5,
+    "y" : 257.0
+  } ]
+}

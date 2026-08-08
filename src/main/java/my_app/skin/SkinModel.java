@@ -1,5 +1,7 @@
 package my_app.skin;
 
+import my_app.gdx.GdxFontLoader;
+
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
@@ -14,33 +16,43 @@ import java.util.Set;
 public final class SkinModel {
 
     private final Path skinJsonPath;
+    private final Path atlasPath;
     private final Path atlasImagePath;
     private final Map<String, AtlasRegion> regions;
     private final Map<String, SkinColor> colors;
     private final Map<String, String> fontFiles;
     private final Map<String, Map<String, Map<String, Object>>> styles;
     private final Map<String, TintedDrawableRef> tintedDrawables;
+    private final Map<String, GdxFontLoader.LoadedFont> fonts;
 
     public SkinModel(
             Path skinJsonPath,
+            Path atlasPath,
             Path atlasImagePath,
             Map<String, AtlasRegion> regions,
             Map<String, SkinColor> colors,
             Map<String, String> fontFiles,
             Map<String, Map<String, Map<String, Object>>> styles,
-            Map<String, TintedDrawableRef> tintedDrawables
+            Map<String, TintedDrawableRef> tintedDrawables,
+            Map<String, GdxFontLoader.LoadedFont> fonts
     ) {
         this.skinJsonPath = skinJsonPath;
+        this.atlasPath = atlasPath;
         this.atlasImagePath = atlasImagePath;
         this.regions = Map.copyOf(regions);
         this.colors = Map.copyOf(colors);
         this.fontFiles = Map.copyOf(fontFiles);
         this.styles = Map.copyOf(styles);
         this.tintedDrawables = Map.copyOf(tintedDrawables);
+        this.fonts = Map.copyOf(fonts);
     }
 
     public Path skinJsonPath() {
         return skinJsonPath;
+    }
+
+    public Path atlasPath() {
+        return atlasPath;
     }
 
     public Path atlasImagePath() {
@@ -95,6 +107,21 @@ public final class SkinModel {
     /** Names of every {@code BitmapFont} declared in the skin, e.g. {@code "font"}. */
     public Set<String> fontNames() {
         return fontFiles.keySet();
+    }
+
+    /**
+     * The real, parsed {@code BitmapFontData} plus its glyph sheet's region
+     * in the shared atlas for a declared {@code BitmapFont} — what
+     * {@link my_app.skin.render.BitmapTextView} draws real glyph pixels
+     * from, instead of a substitute JavaFX system font. Empty when the
+     * font's {@code .fnt} file couldn't be found/parsed, its glyph region
+     * isn't in the atlas, or (for a widget preview built before a skin
+     * declares a real font at all) simply wasn't given one — any of which
+     * falls back to {@link my_app.skin.render.BitmapTextView}'s own plain
+     * fallback rendering instead of failing the whole skin load.
+     */
+    public Optional<GdxFontLoader.LoadedFont> font(String name) {
+        return Optional.ofNullable(fonts.get(name));
     }
 
     /** Style class simple names present in this skin, e.g. {@code "ButtonStyle"}, {@code "LabelStyle"}. */

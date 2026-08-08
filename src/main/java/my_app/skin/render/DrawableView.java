@@ -36,13 +36,24 @@ public final class DrawableView {
      * layer's size tracks {@code target}'s actual rendered bounds reactively
      * (not just at construction time) since both {@link AtlasImageView} and
      * {@link NinePatchView} can be resized after being built.
+     * <p>
+     * Tracks {@link Node#layoutBoundsProperty()}, not {@code boundsInLocalProperty()}
+     * — {@code boundsInLocal} includes the node's own {@code effect}, and
+     * {@code CanvasController} composes a selection glow *around* this exact
+     * tint via {@code DropShadow.setInput(...)} once a widget's selected.
+     * Tracking {@code boundsInLocal} created a direct feedback loop: resizing
+     * this {@code ColorInput} changes the effect's own bounds, which changes
+     * {@code boundsInLocal}, which re-fires this same listener — a real
+     * {@code StackOverflowError} reproduced while testing that composition.
+     * {@code layoutBounds} is defined to exclude effect/clip entirely, so it
+     * still reacts to genuine resizes without ever reacting to its own output.
      */
     static void applyTint(Node target, SkinColor tint) {
         if (tint == null) return;
 
         Color fxColor = Color.color(tint.r(), tint.g(), tint.b(), tint.a());
         ColorInput colorLayer = new ColorInput(0, 0, 0, 0, fxColor);
-        target.boundsInLocalProperty().addListener((obs, oldBounds, bounds) -> {
+        target.layoutBoundsProperty().addListener((obs, oldBounds, bounds) -> {
             colorLayer.setWidth(bounds.getWidth());
             colorLayer.setHeight(bounds.getHeight());
         });

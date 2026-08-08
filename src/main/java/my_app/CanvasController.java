@@ -6,18 +6,18 @@ import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.Effect;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 import megalodonte.base.components.Component;
 import megalodonte.base.theme.ThemeManager;
 import megalodonte.components.layout_components.Canva;
 import my_app.skin.SkinModel;
+import my_app.skin.render.BitmapTextView;
 import my_app.skin.render.SkinImages;
 import my_app.widget.PlacedWidget;
 import my_app.widget.WidgetSpec;
@@ -48,7 +48,6 @@ import java.util.Map;
  */
 final class CanvasController {
 
-    private static final DropShadow SELECTION_HIGHLIGHT = new DropShadow(8, Themes.SELECTION_HIGHLIGHT_COLOR);
     private static final Color GUIDE_COLOR = Themes.GUIDE_COLOR;
     private static final double GUIDE_SHOW_DISTANCE = 15;
     private static final double GUIDE_SNAP_DISTANCE = 5;
@@ -61,9 +60,17 @@ final class CanvasController {
     private final Canva canva;
     private final HomeScreenViewModel viewModel;
     private final Map<String, Node> nodesById = new HashMap<>();
-    private final Map<String, Text> textNodesById = new HashMap<>();
-    /** Each text widget's font size *before* any {@code fontScale} override — {@link #setFontScale} always multiplies from here, never from the node's current (possibly already-scaled) size, so repeated edits don't compound. */
-    private final Map<String, Double> baseFontSizeById = new HashMap<>();
+    private final Map<String, BitmapTextView> textViewsById = new HashMap<>();
+    /**
+     * Each widget's own effect (a {@code Blend} tint for a {@code Skin.TintedDrawable}-based
+     * background, or {@code null}) *before* selection is ever applied.
+     * {@link #applySelectionHighlight} composes this with the selection glow
+     * rather than replacing it outright — a plain {@code node.setEffect(glow)}
+     * used to permanently wipe a tinted widget's color the moment it was ever
+     * selected (selecting is required to reach the resize handle at all, so
+     * this looked "resize breaks tinted button backgrounds" from the outside).
+     */
+    private final Map<String, Effect> baseEffectById = new HashMap<>();
     private final Line verticalCenterGuide = new Line();
     private final Line horizontalCenterGuide = new Line();
     private final Canvas gridCanvas = new Canvas();
@@ -250,8 +257,8 @@ final class CanvasController {
                 node -> node != gridCanvas && node != verticalCenterGuide && node != horizontalCenterGuide && node != resizeHandle);
         viewModel.placedWidgets().clear();
         nodesById.clear();
-        textNodesById.clear();
-        baseFontSizeById.clear();
+        textViewsById.clear();
+        baseEffectById.clear();
         viewModel.selectedWidgetIdState().set(null);
     }
 
@@ -273,15 +280,15 @@ final class CanvasController {
                 w -> w.id().equals(widgetId),
                 w -> switch (w.spec()) {
                     case WidgetSpec.TextButtonSpec s -> new PlacedWidget(
-                            w.id(), new WidgetSpec.TextButtonSpec(s.styleName(), newText, s.fontColor(), s.fontScale()), w.x(), w.y(), w.nickname(), w.width(), w.height());
+                            w.id(), new WidgetSpec.TextButtonSpec(s.styleName(), newText, s.fontColor()), w.x(), w.y(), w.nickname(), w.width(), w.height());
                     case WidgetSpec.LabelSpec s -> new PlacedWidget(
-                            w.id(), new WidgetSpec.LabelSpec(s.styleName(), newText, s.fontColor(), s.fontScale()), w.x(), w.y(), w.nickname(), w.width(), w.height());
+                            w.id(), new WidgetSpec.LabelSpec(s.styleName(), newText, s.fontColor()), w.x(), w.y(), w.nickname(), w.width(), w.height());
                     default -> w;
                 });
 
-        Text textNode = textNodesById.get(widgetId);
-        if (textNode != null) {
-            textNode.setText(newText);
+        BitmapTextView textView = textViewsById.get(widgetId);
+        if (textView != null) {
+            textView.setText(newText);
         }
     }
 
@@ -306,8 +313,8 @@ final class CanvasController {
         PlacedWidget current = findPlacedWidget(widgetId);
         if (current == null) return;
         WidgetSpec newSpec = switch (current.spec()) {
-            case WidgetSpec.TextButtonSpec s -> new WidgetSpec.TextButtonSpec(s.styleName(), s.text(), hexColorOrNull, s.fontScale());
-            case WidgetSpec.LabelSpec s -> new WidgetSpec.LabelSpec(s.styleName(), s.text(), hexColorOrNull, s.fontScale());
+            case WidgetSpec.TextButtonSpec s -> new WidgetSpec.TextButtonSpec(s.styleName(), s.text(), hexColorOrNull);
+            case WidgetSpec.LabelSpec s -> new WidgetSpec.LabelSpec(s.styleName(), s.text(), hexColorOrNull);
             default -> null;
         };
         if (newSpec == null) return;
@@ -316,44 +323,12 @@ final class CanvasController {
                 w -> w.id().equals(widgetId),
                 w -> new PlacedWidget(w.id(), newSpec, w.x(), w.y(), w.nickname(), w.width(), w.height()));
 
-        Text textNode = textNodesById.get(widgetId);
-        if (textNode == null) return;
+        BitmapTextView textView = textViewsById.get(widgetId);
+        if (textView == null) return;
         SkinModel skin = viewModel.skinState().get();
         Color resolved = hexColorOrNull != null ? Color.web(hexColorOrNull)
                 : skin == null ? Color.BLACK : WidgetViews.skinFontColor(newSpec, skin);
-        textNode.setFill(resolved);
-    }
-
-    /**
-     * Sets a placed {@code TextButtonSpec}/{@code LabelSpec} widget's font
-     * scale (a multiplier on the skin's own font size — maps directly onto
-     * libGDX's own {@code Label.setFontScale}), or clears the override (back
-     * to the skin's own size, scale 1.0) when {@code null}. Always applied
-     * against {@link #baseFontSizeById}'s stored *unscaled* size, not the
-     * text node's current (possibly already-scaled) font size — otherwise
-     * repeated edits would compound (e.g. scale 2.0 then scale 1.5 would
-     * apply 1.5x on top of the already-doubled size instead of 1.5x on the
-     * original).
-     */
-    void setFontScale(String widgetId, Double scaleOrNull) {
-        PlacedWidget current = findPlacedWidget(widgetId);
-        if (current == null) return;
-        WidgetSpec newSpec = switch (current.spec()) {
-            case WidgetSpec.TextButtonSpec s -> new WidgetSpec.TextButtonSpec(s.styleName(), s.text(), s.fontColor(), scaleOrNull);
-            case WidgetSpec.LabelSpec s -> new WidgetSpec.LabelSpec(s.styleName(), s.text(), s.fontColor(), scaleOrNull);
-            default -> null;
-        };
-        if (newSpec == null) return;
-
-        viewModel.placedWidgets().updateIf(
-                w -> w.id().equals(widgetId),
-                w -> new PlacedWidget(w.id(), newSpec, w.x(), w.y(), w.nickname(), w.width(), w.height()));
-
-        Text textNode = textNodesById.get(widgetId);
-        Double baseSize = baseFontSizeById.get(widgetId);
-        if (textNode == null || baseSize == null) return;
-        double scale = scaleOrNull != null ? scaleOrNull : 1.0;
-        textNode.setFont(Font.font(textNode.getFont().getFamily(), baseSize * scale));
+        textView.setColor(resolved);
     }
 
     private PlacedWidget findPlacedWidget(String widgetId) {
@@ -396,8 +371,8 @@ final class CanvasController {
         if (node == null) return;
 
         ((Pane) canva.getNode()).getChildren().remove(node);
-        textNodesById.remove(widgetId);
-        baseFontSizeById.remove(widgetId);
+        textViewsById.remove(widgetId);
+        baseEffectById.remove(widgetId);
         viewModel.placedWidgets().removeIf(w -> w.id().equals(widgetId));
 
         if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
@@ -410,9 +385,9 @@ final class CanvasController {
         return nodesById.get(widgetId);
     }
 
-    /** The live editable {@link Text} for a placed {@code TextButtonSpec}/{@code LabelSpec} widget, or null (tests only). */
-    Node textNodeFor(String widgetId) {
-        return textNodesById.get(widgetId);
+    /** The live editable {@link BitmapTextView} for a placed {@code TextButtonSpec}/{@code LabelSpec} widget, or null (tests only). */
+    BitmapTextView textViewFor(String widgetId) {
+        return textViewsById.get(widgetId);
     }
 
     Line verticalCenterGuide() {
@@ -444,18 +419,16 @@ final class CanvasController {
         }
         canva.child(component, x, y);
         nodesById.put(id, node);
-        Text textNode = WidgetViews.textNodeOf(node);
-        if (textNode != null) {
-            textNodesById.put(id, textNode);
-            // Recover the *unscaled* base size even if this spec already carries a
-            // fontScale (restoring a saved layout) - WidgetViews.build() already applied
-            // it, so the node's current size divided by that same scale is the base.
-            double currentScale = switch (spec) {
-                case WidgetSpec.TextButtonSpec s -> s.fontScale() != null ? s.fontScale() : 1.0;
-                case WidgetSpec.LabelSpec s -> s.fontScale() != null ? s.fontScale() : 1.0;
-                default -> 1.0;
-            };
-            baseFontSizeById.put(id, textNode.getFont().getSize() / currentScale);
+        // A plain ButtonSpec/ImageSpec's node IS its background - if that
+        // background is a Skin.TintedDrawable alias, WidgetViews.build()
+        // already gave it a Blend tint effect here. TextButtonSpec/LabelSpec's
+        // top-level node is a StackPane whose *child* carries the tint
+        // instead, so this is always null for those - nothing to preserve,
+        // and nothing this widget's own selection highlight could clobber.
+        baseEffectById.put(id, node.getEffect());
+        BitmapTextView textView = WidgetViews.bitmapTextViewOf(node);
+        if (textView != null) {
+            textViewsById.put(id, textView);
         }
         viewModel.placedWidgets().add(new PlacedWidget(id, spec, x, y, nickname, width, height));
         makeMovable(node, id);
@@ -549,17 +522,50 @@ final class CanvasController {
         horizontalCenterGuide.setVisible(false);
     }
 
+    /**
+     * Composes the selection glow with each widget's own {@link #baseEffectById}
+     * effect instead of replacing it outright — {@code node.setEffect(glow)}
+     * used to permanently wipe a plain {@code ButtonSpec}'s
+     * {@code Skin.TintedDrawable} tint (see {@link #baseEffectById}) the
+     * moment it was ever selected, since selecting stayed applied via
+     * {@code DropShadow.setInput} chains the glow *on top of* the tint
+     * (rendered first, then the shadow around the result), and deselecting
+     * restores the tint alone instead of {@code null}.
+     */
     private void applySelectionHighlight(String selectedId) {
-        nodesById.forEach((id, node) -> node.setEffect(id.equals(selectedId) ? SELECTION_HIGHLIGHT : null));
+        nodesById.forEach((id, node) -> {
+            Effect base = baseEffectById.get(id);
+            if (id.equals(selectedId)) {
+                DropShadow glow = new DropShadow(8, Themes.SELECTION_HIGHLIGHT_COLOR);
+                glow.setInput(base);
+                node.setEffect(glow);
+            } else {
+                node.setEffect(base);
+            }
+        });
 
         Node selected = selectedNode();
-        if (selected == null) {
+        if (selected == null || !isResizable(selectedId)) {
             resizeHandle.setVisible(false);
             return;
         }
         positionResizeHandle(selected);
         resizeHandle.setVisible(true);
         resizeHandle.toFront();
+    }
+
+    /**
+     * A {@code LabelSpec} ("Texto" in the Palette) has no resizable visual at
+     * all - dragging its resize handle only grew/shrank the invisible
+     * {@code StackPane} box around the {@link BitmapTextView}'s own
+     * glyph-fit {@code Canvas}, which never reflows to fill it (matching
+     * real Scene2D {@code Label.setSize()} with wrap off), so the handle
+     * never actually changed anything visible. Every other kind keeps a real
+     * resizable background (a drawable region, or a {@code TextButton}'s).
+     */
+    private boolean isResizable(String widgetId) {
+        PlacedWidget widget = findPlacedWidget(widgetId);
+        return widget != null && !(widget.spec() instanceof WidgetSpec.LabelSpec);
     }
 
     private double canvasWidth() {

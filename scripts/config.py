@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def _read_gradle_properties():
     props = {}
-    with open(ROOT / "gradle.properties") as f:
+    with open(ROOT / "gradle.properties", encoding="iso-8859-1") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):

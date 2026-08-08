@@ -7,15 +7,16 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 import megalodonte.base.components.Component;
+import my_app.gdx.GdxFontLoader;
 import my_app.skin.SkinColor;
 import my_app.skin.SkinModel;
+import my_app.skin.render.BitmapTextView;
 import my_app.skin.render.DrawableView;
 import my_app.widget.WidgetSpec;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Resolves a {@link WidgetSpec} against a loaded {@link SkinModel} into an
@@ -24,10 +25,9 @@ import java.util.Map;
  * dragging a preview onto the canvas never looks different from the preview
  * itself.
  * <p>
- * Text is rendered with a plain JavaFX {@link Text} (system font), not the
- * skin's actual BitmapFont glyphs — {@link SkinModel#fontFile} only exposes
- * the {@code .fnt} path, and parsing/rendering real bitmap font glyphs is
- * follow-up work, not needed to preview layout/color/position.
+ * Text is rendered with a {@link BitmapTextView} — the real BitmapFont
+ * glyphs straight from the skin's own atlas, pixel-for-pixel the same as the
+ * real libGDX game, not a substitute JavaFX system font.
  */
 public final class WidgetViews {
 
@@ -39,7 +39,7 @@ public final class WidgetViews {
             case WidgetSpec.ImageSpec s -> buildImage(skin, atlasImage, s);
             case WidgetSpec.ButtonSpec s -> buildButton(skin, atlasImage, s);
             case WidgetSpec.TextButtonSpec s -> buildTextButton(skin, atlasImage, s);
-            case WidgetSpec.LabelSpec s -> buildLabel(skin, s);
+            case WidgetSpec.LabelSpec s -> buildLabel(skin, atlasImage, s);
         };
     }
 
@@ -58,29 +58,29 @@ public final class WidgetViews {
         SkinModel.ResolvedDrawable drawable = resolveDrawable(skin, "TextButtonStyle", spec.styleName(), "up");
         Component background = DrawableView.of(atlasImage, drawable.region(), drawable.tint());
 
-        Text label = new Text(spec.text());
-        label.setFill(resolveFontColor(skin, "TextButtonStyle", spec.styleName()));
-        label.setMouseTransparent(true);
-        applyFontOverrides(label, spec.fontColor(), spec.fontScale());
+        Color fontColor = resolveFontColorOverride(skin, "TextButtonStyle", spec.styleName(), spec.fontColor());
+        Optional<GdxFontLoader.LoadedFont> font = resolveFont(skin, "TextButtonStyle", spec.styleName());
+        BitmapTextView label = new BitmapTextView(atlasImage, font, spec.text(), fontColor);
+        label.getNode().setMouseTransparent(true);
 
-        StackPane stack = new StackPane(background.getNode(), label);
-        StackPane.setAlignment(label, Pos.CENTER);
+        StackPane stack = new StackPane(background.getNode(), label.getNode());
+        StackPane.setAlignment(label.getNode(), Pos.CENTER);
         return Component.CreateFromJavaFxNode(stack);
     }
 
-    private static Component buildLabel(SkinModel skin, WidgetSpec.LabelSpec spec) {
-        Text label = new Text(spec.text());
-        label.setFill(resolveFontColor(skin, "LabelStyle", spec.styleName()));
-        label.setMouseTransparent(true);
-        applyFontOverrides(label, spec.fontColor(), spec.fontScale());
+    private static Component buildLabel(SkinModel skin, Image atlasImage, WidgetSpec.LabelSpec spec) {
+        Color fontColor = resolveFontColorOverride(skin, "LabelStyle", spec.styleName(), spec.fontColor());
+        Optional<GdxFontLoader.LoadedFont> font = resolveFont(skin, "LabelStyle", spec.styleName());
+        BitmapTextView label = new BitmapTextView(atlasImage, font, spec.text(), fontColor);
+        label.getNode().setMouseTransparent(true);
 
         // Wrapped in a StackPane (no background child - LabelStyle has none)
         // so a Label has the same kind of resizable container TextButton/Button
         // do: the box CanvasController's resize handle drags is well-defined,
         // even though - matching real Scene2D Label.setSize() with wrap off -
         // the glyphs themselves don't reflow to fit it.
-        StackPane stack = new StackPane(label);
-        StackPane.setAlignment(label, Pos.CENTER);
+        StackPane stack = new StackPane(label.getNode());
+        StackPane.setAlignment(label.getNode(), Pos.CENTER);
         return Component.CreateFromJavaFxNode(stack);
     }
 
@@ -118,28 +118,31 @@ public final class WidgetViews {
     }
 
     /**
-     * Applies a {@code TextButtonSpec}/{@code LabelSpec}'s own {@code fontColor}/
-     * {@code fontScale} on top of whatever the skin style already resolved —
-     * either being {@code null} means "keep the skin's own value" (both
-     * are only ever set by {@link my_app.CanvasController#setFontColor}/
-     * {@code setFontScale} on an existing widget, once the user actually
-     * overrides one). An invalid hex color is ignored (keeps the skin's
-     * color) rather than throwing — the "Properties" panel is expected to
-     * validate before calling that far, but this is the last line of
-     * defense against a corrupt/hand-edited layout JSON.
+     * A {@code TextButtonSpec}/{@code LabelSpec}'s own {@code fontColor}
+     * override on top of the skin style's own color — {@code null} means
+     * "keep the skin's own value" (only ever set by
+     * {@link my_app.CanvasController#setFontColor} on an existing widget,
+     * once the user actually overrides it). An invalid hex color is ignored
+     * (keeps the skin's color) rather than throwing — the "Properties" panel
+     * is expected to validate before calling this far, but this is the last
+     * line of defense against a corrupt/hand-edited layout JSON.
      */
-    private static void applyFontOverrides(Text label, String fontColor, Double fontScale) {
-        if (fontColor != null) {
+    private static Color resolveFontColorOverride(SkinModel skin, String styleClass, String styleName, String fontColorOverride) {
+        if (fontColorOverride != null) {
             try {
-                label.setFill(Color.web(fontColor));
+                return Color.web(fontColorOverride);
             } catch (IllegalArgumentException ignored) {
-                // invalid hex - keep whatever the skin style already resolved
+                // invalid hex - fall through to the skin's own color
             }
         }
-        if (fontScale != null) {
-            Font current = label.getFont();
-            label.setFont(Font.font(current.getFamily(), current.getSize() * fontScale));
-        }
+        return resolveFontColor(skin, styleClass, styleName);
+    }
+
+    /** The real BitmapFont behind a style's own {@code font} field, resolved against the skin - empty if the style has none, or it didn't load (see {@link SkinModel#font}). */
+    private static Optional<GdxFontLoader.LoadedFont> resolveFont(SkinModel skin, String styleClass, String styleName) {
+        Object value = requireStyle(skin, styleClass, styleName).get("font");
+        if (!(value instanceof String fontName)) return Optional.empty();
+        return skin.font(fontName);
     }
 
     private static Map<String, Object> requireStyle(SkinModel skin, String styleClass, String styleName) {
@@ -148,17 +151,18 @@ public final class WidgetViews {
     }
 
     /**
-     * The editable {@link Text} inside a node {@link #build} returned for a
-     * {@code TextButtonSpec}/{@code LabelSpec}, or {@code null} for the other
-     * kinds. Both are a {@code StackPane} with the label as its last child
-     * ({@code buildTextButton}'s has a background before it; {@code buildLabel}'s
-     * has only the label) - read from the end rather than a fixed index so
-     * either shape resolves the same way.
+     * The editable {@link BitmapTextView} inside a node {@link #build}
+     * returned for a {@code TextButtonSpec}/{@code LabelSpec}, or
+     * {@code null} for the other kinds. Both are a {@code StackPane} with
+     * the label's {@code Canvas} as its last child ({@code buildTextButton}'s
+     * has a background before it; {@code buildLabel}'s has only the label) -
+     * read from the end rather than a fixed index so either shape resolves
+     * the same way. The scene graph only ever holds the raw {@code Canvas},
+     * not this wrapper, so recovering it goes through {@link BitmapTextView#of}.
      */
-    public static Text textNodeOf(Node builtNode) {
-        if (builtNode instanceof StackPane stack && !stack.getChildren().isEmpty()
-                && stack.getChildren().get(stack.getChildren().size() - 1) instanceof Text text) {
-            return text;
+    public static BitmapTextView bitmapTextViewOf(Node builtNode) {
+        if (builtNode instanceof StackPane stack && !stack.getChildren().isEmpty()) {
+            return BitmapTextView.of(stack.getChildren().get(stack.getChildren().size() - 1));
         }
         return null;
     }
@@ -194,7 +198,7 @@ public final class WidgetViews {
         } else if (node instanceof Region region) {
             lockSize(region, width, height);
         }
-        // A bare Text (Label's own glyph) is left alone - it doesn't reflow, only its wrapper does.
+        // A bare Canvas (Label's own glyphs) is left alone - it doesn't reflow, only its wrapper does.
     }
 
     private static void lockSize(Region region, double width, double height) {

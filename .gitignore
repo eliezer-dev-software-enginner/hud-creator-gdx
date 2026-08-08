@@ -48,4 +48,5 @@ bin/
 temp
 dist
 tinted-drawable-fix.md
-CONTEXT.md
+docs
+/.venv/

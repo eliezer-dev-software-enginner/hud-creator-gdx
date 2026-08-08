@@ -34,6 +34,9 @@ class CanvasControllerResizeTest {
 
     private static final Path EXAMPLE_SKIN = Path.of(
             "source.images.and.assets", "extract to your assets folder", "skin.json");
+    // The bundled example skin has no LabelStyle at all - flat-earth does.
+    private static final Path LABEL_CAPABLE_SKIN = Path.of(
+            "..", "gdx-skins", "flat-earth", "skin", "flat-earth-ui.json");
 
     @BeforeAll
     static void initJavaFx() {
@@ -166,6 +169,29 @@ class CanvasControllerResizeTest {
 
             controller.removeWidget(id);
             assertFalse(handle.isVisible(), "removing the selected widget should hide the handle too");
+        });
+    }
+
+    @Test
+    void theHandleStaysHiddenForALabelWidget() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(LABEL_CAPABLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.LabelSpec("default", "Lives"), 60, 40);
+            String id = viewModel.placedWidgets().get().get(0).id();
+            Node widgetNode = controller.nodeFor(id);
+            Rectangle handle = controller.resizeHandle();
+
+            fire(widgetNode.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, widgetNode.getLayoutX(), widgetNode.getLayoutY());
+
+            assertFalse(handle.isVisible(), "a LabelSpec's Canvas is always glyph-sized and never reflows - no resize handle makes sense");
         });
     }
 

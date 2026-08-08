@@ -26,12 +26,14 @@ class SkinModelTest {
 
         SkinModel skin = new SkinModel(
                 Path.of("skin.json"),
+                Path.of("skin.atlas"),
                 Path.of("skin.png"),
                 Map.of("button-close", baseRegion),
                 Map.of("color", tintColor),
                 Map.of(),
                 Map.of(),
-                Map.of("button-close-c", new TintedDrawableRef("button-close", tintColor))
+                Map.of("button-close-c", new TintedDrawableRef("button-close", tintColor)),
+                Map.of()
         );
 
         var resolved = skin.drawable("button-close-c").orElseThrow();
@@ -45,8 +47,10 @@ class SkinModelTest {
 
         SkinModel skin = new SkinModel(
                 Path.of("skin.json"),
+                Path.of("skin.atlas"),
                 Path.of("skin.png"),
                 Map.of("button-close", baseRegion),
+                Map.of(),
                 Map.of(),
                 Map.of(),
                 Map.of(),
@@ -61,7 +65,7 @@ class SkinModelTest {
     @Test
     void anUnknownNameResolvesToNothing() {
         SkinModel skin = new SkinModel(
-                Path.of("skin.json"), Path.of("skin.png"), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                Path.of("skin.json"), Path.of("skin.atlas"), Path.of("skin.png"), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
 
         assertFalse(skin.drawable("nonexistent").isPresent());
     }
@@ -69,8 +73,9 @@ class SkinModelTest {
     @Test
     void aTintedDrawableAliasWithNoMatchingRegionResolvesToNothing() {
         SkinModel skin = new SkinModel(
-                Path.of("skin.json"), Path.of("skin.png"), Map.of(), Map.of(), Map.of(), Map.of(),
-                Map.of("button-close-c", new TintedDrawableRef("button-close", new SkinColor(1, 0, 0, 1))));
+                Path.of("skin.json"), Path.of("skin.atlas"), Path.of("skin.png"), Map.of(), Map.of(), Map.of(), Map.of(),
+                Map.of("button-close-c", new TintedDrawableRef("button-close", new SkinColor(1, 0, 0, 1))),
+                Map.of());
 
         assertFalse(skin.drawable("button-close-c").isPresent());
     }

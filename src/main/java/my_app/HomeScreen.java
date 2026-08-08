@@ -67,16 +67,6 @@ public class HomeScreen implements ScreenComponent {
 
         SkinPalettePanel palette = new SkinPalettePanel(viewModel, canvasController, currentTheme);
 
-        Column canvasArea = new Column(new ColumnProps().spacingOf(8).fillWidth()).children(
-                CanvasSizeToolbar.build(viewModel),
-                canva
-        );
-
-        Row workspace = new Row(new RowProps().fillHeight()).children(
-                canvasArea,
-                palette.asComponent()
-        );
-
         return new Container(new ContainerProps().fillHeight().bgColor(currentTheme.colors().background())).children(
                 new MenuBar().menu(new Menu("Options")
                                 .item("New",()->viewModel.handleNew())
@@ -89,7 +79,15 @@ public class HomeScreen implements ScreenComponent {
                         )
                         .trailing(themeToggleIcon(currentTheme)),
                 new SpacerVertical(10),
-                workspace,
+                //workspace
+                new Row(new RowProps().fillHeight()).children(
+                        //canvasArea
+                        new Column(new ColumnProps().spacingOf(8).fillWidth()).children(
+                                CanvasSizeToolbar.build(viewModel),
+                                canva
+                        ),
+                        palette.asComponent()
+                ),
                 buildStatusBar(viewModel, currentTheme)
         );
     }

@@ -1,5 +1,7 @@
 package my_app;
 
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.stage.FileChooser;
 import megalodonte.application.MegalodonteApp;
 import megalodonte.base.state.State;
@@ -237,7 +239,20 @@ public class HomeScreenViewModel {
         persistAppStorage();
     }
 
+    /**
+     * Opens the "Load Skin" dialog — with a confirmation gate first if a
+     * skin (and, likely, everything placed against it) is already loaded,
+     * since loading a new one clears the Canva. Nothing happens yet from
+     * that confirmation alone: the actual clear only happens once a skin
+     * file is chosen and successfully loads (see {@link #loadSkinFrom}), so
+     * backing out of either the confirmation or the file dialog leaves the
+     * current project untouched.
+     */
     public void handleLoad() {
+        if (skin.get() != null && !confirmReplacingTheCurrentSkin()) {
+            return;
+        }
+
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Load skin (skin.json)");
         chooser.getExtensionFilters().add(
@@ -250,13 +265,34 @@ public class HomeScreenViewModel {
         loadSkinFrom(selected.toPath());
     }
 
-    /** The part of {@link #handleLoad()} after the file dialog — separated out so it's testable without a real open dialog. */
+    private boolean confirmReplacingTheCurrentSkin() {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Load a different skin?");
+        alert.setHeaderText("Are you sure?");
+        alert.setContentText("Make sure to save your project first — loading a new skin will clear everything currently on the Canva.");
+        return alert.showAndWait().filter(button -> button == ButtonType.OK).isPresent();
+    }
+
+    /**
+     * The part of {@link #handleLoad()} after the file dialog (and the
+     * confirmation, if one was shown) — separated out so it's testable
+     * without a real open dialog. Clears the Canva only once the new skin
+     * actually loads successfully — widgets placed against the old skin
+     * would otherwise stick around referencing regions/styles that may not
+     * even exist in the new one, which is exactly the "loads on top and
+     * causes problems later" this whole confirm-and-clear flow exists to
+     * avoid — but a failed load (bad file) leaves the current project
+     * completely untouched instead of destroying it for nothing.
+     */
     void loadSkinFrom(Path selected) {
         lastSkinDirectory = selected.toAbsolutePath().normalize().getParent();
         persistAppStorage();
 
         try {
             SkinModel loaded = SkinLoader.load(selected);
+            if (canvasController != null) {
+                canvasController.clear();
+            }
             loadError.set(null);
             skin.set(loaded);
         } catch (RuntimeException e) {
