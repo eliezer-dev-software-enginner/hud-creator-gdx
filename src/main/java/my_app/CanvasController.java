@@ -555,17 +555,19 @@ final class CanvasController {
     }
 
     /**
-     * A {@code LabelSpec} ("Texto" in the Palette) has no resizable visual at
-     * all - dragging its resize handle only grew/shrank the invisible
-     * {@code StackPane} box around the {@link BitmapTextView}'s own
-     * glyph-fit {@code Canvas}, which never reflows to fill it (matching
-     * real Scene2D {@code Label.setSize()} with wrap off), so the handle
-     * never actually changed anything visible. Every other kind keeps a real
-     * resizable background (a drawable region, or a {@code TextButton}'s).
+     * A {@code LabelSpec} ("Texto" in the Palette) whose style declares no
+     * {@code background} has no resizable visual at all - dragging its
+     * resize handle only grew/shrank the invisible {@code StackPane} box
+     * around the {@link BitmapTextView}'s own glyph-fit {@code Canvas},
+     * which never reflows to fill it (matching real Scene2D
+     * {@code Label.setSize()} with wrap off), so the handle never actually
+     * changed anything visible. Every other kind - including a {@code Label}
+     * whose style *does* declare a {@code background} (e.g. a bordered/framed
+     * style) - keeps a real resizable background. See {@link WidgetViews#isResizable}.
      */
     private boolean isResizable(String widgetId) {
-        PlacedWidget widget = findPlacedWidget(widgetId);
-        return widget != null && !(widget.spec() instanceof WidgetSpec.LabelSpec);
+        Node node = nodesById.get(widgetId);
+        return node != null && WidgetViews.isResizable(node);
     }
 
     private double canvasWidth() {

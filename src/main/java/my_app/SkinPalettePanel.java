@@ -237,17 +237,13 @@ final class SkinPalettePanel {
      * which is {@code null} until the widget's ever been resized at all) so
      * it always starts from what's really on screen. Null if the widget's
      * node can't be found (shouldn't happen for a selected widget, but
-     * {@link CanvasController#setSize} already guards the same way), or for
-     * a {@code LabelSpec} ("Texto") - same reasoning as the Canva's own
-     * resize handle (see {@link CanvasController#isResizable}): its
-     * {@code BitmapTextView} canvas is always exactly glyph-sized and never
-     * reflows, so resizing its invisible wrapper box has no visible effect.
+     * {@link CanvasController#setSize} already guards the same way), or if
+     * resizing it wouldn't do anything visible - same check the Canva's own
+     * resize handle uses, see {@link my_app.widget.render.WidgetViews#isResizable}.
      */
     private Component buildSizeRow(PlacedWidget widget) {
-        if (widget.spec() instanceof WidgetSpec.LabelSpec) return null;
-
         Node node = canvasController.nodeFor(widget.id());
-        if (node == null) return null;
+        if (node == null || !WidgetViews.isResizable(node)) return null;
 
         Component widthInput = new Input(State.of(formatSize(node.prefWidth(-1))), new InputProps().width(55))
                 .onChange(value -> applySizeEdit(widget.id(), value, node.prefWidth(-1), true));

@@ -2,6 +2,7 @@ package my_app.widget.render;
 
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Region;
@@ -74,12 +75,17 @@ public final class WidgetViews {
         BitmapTextView label = new BitmapTextView(atlasImage, font, spec.text(), fontColor);
         label.getNode().setMouseTransparent(true);
 
-        // Wrapped in a StackPane (no background child - LabelStyle has none)
-        // so a Label has the same kind of resizable container TextButton/Button
-        // do: the box CanvasController's resize handle drags is well-defined,
-        // even though - matching real Scene2D Label.setSize() with wrap off -
-        // the glyphs themselves don't reflow to fit it.
-        StackPane stack = new StackPane(label.getNode());
+        // LabelStyle.background is optional (real Scene2D Label draws it
+        // behind the text when present, e.g. a bordered/framed style like
+        // this project's "alt"/"narration"/"half-tone" example styles) -
+        // WidgetViews never resolved it at all before, so a Label using one
+        // of those styles previewed as bare floating text with no box, while
+        // the real game correctly drew the frame (reported directly, against
+        // a screenshot of the real game rendering it).
+        Optional<SkinModel.ResolvedDrawable> background = resolveOptionalDrawable(skin, "LabelStyle", spec.styleName(), "background");
+        StackPane stack = background
+                .map(d -> new StackPane(DrawableView.of(atlasImage, d.region(), d.tint()).getNode(), label.getNode()))
+                .orElseGet(() -> new StackPane(label.getNode()));
         StackPane.setAlignment(label.getNode(), Pos.CENTER);
         return Component.CreateFromJavaFxNode(stack);
     }
@@ -92,6 +98,13 @@ public final class WidgetViews {
         }
         return skin.drawable(regionName)
                 .orElseThrow(() -> new IllegalArgumentException("Region not found: " + regionName));
+    }
+
+    /** Like {@link #resolveDrawable}, but for a field that's genuinely optional on the style (e.g. {@code LabelStyle.background}) - empty rather than throwing when the field's simply absent, or its region can't be found. */
+    private static Optional<SkinModel.ResolvedDrawable> resolveOptionalDrawable(SkinModel skin, String styleClass, String styleName, String field) {
+        Object value = requireStyle(skin, styleClass, styleName).get(field);
+        if (!(value instanceof String regionName)) return Optional.empty();
+        return skin.drawable(regionName);
     }
 
     /**
@@ -173,7 +186,8 @@ public final class WidgetViews {
      * resized {@link my_app.widget.PlacedWidget}). Every kind {@link #build}
      * returns is either an {@link ImageView} directly ({@code Image}/{@code Button}),
      * or a {@link StackPane} whose first child is the actual visual drawable
-     * ({@code TextButton}'s background; {@code Label} has none). The
+     * ({@code TextButton}'s background; a {@code Label}'s only if its style
+     * declared one - see {@link #isResizable}). The
      * {@code StackPane} itself is resized too so {@code CanvasController}'s
      * own bounds math ({@code node.prefWidth(-1)}) sees the new size — using
      * {@code setPrefSize} (not {@code resize}), the same as {@link my_app.skin.render.NinePatchView#size},
@@ -199,6 +213,25 @@ public final class WidgetViews {
             lockSize(region, width, height);
         }
         // A bare Canvas (Label's own glyphs) is left alone - it doesn't reflow, only its wrapper does.
+    }
+
+    /**
+     * Whether {@link #resize} would have any *visible* effect on a node
+     * {@link #build} returned. {@code true} for an {@link ImageView}/{@code Region}
+     * directly ({@code Image}/{@code Button}), or a {@code StackPane} whose
+     * first child is one of those ({@code TextButton}'s background; a
+     * {@code Label} whose style declared a {@code background} drawable, e.g.
+     * this project's "alt"/"narration"/"half-tone" example styles). {@code false}
+     * only for a {@code Label} with no such style - its {@code StackPane}
+     * wraps nothing but its own {@code BitmapTextView} {@code Canvas}, which
+     * {@link #resizeVisual} always leaves alone, so growing/shrinking the
+     * wrapper just adds or removes invisible padding around unchanged glyphs.
+     */
+    public static boolean isResizable(Node builtNode) {
+        if (builtNode instanceof StackPane stack) {
+            return !stack.getChildren().isEmpty() && !(stack.getChildren().get(0) instanceof Canvas);
+        }
+        return true;
     }
 
     private static void lockSize(Region region, double width, double height) {
