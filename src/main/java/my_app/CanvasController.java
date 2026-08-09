@@ -41,9 +41,10 @@ import java.util.Set;
  * {@link HomeScreenViewModel#selectedWidgetIdsState()} (Shift/Ctrl+click adds
  * to the selection instead of replacing it), which highlights every selected
  * widget here and drives the "Properties" panel (nickname editing) in
- * {@link SkinPalettePanel} — shows center-alignment guides while dragging
- * (see {@link #applyCenterGuide}), and draws a grid overlay reacting to
- * {@link HomeScreenViewModel#showingGridState()}.
+ * {@link SkinPalettePanel} — shows alignment guides while dragging a single
+ * widget, against either the canvas's own center or any other placed
+ * widget's matching edge/center (see {@link #applyAlignmentGuide}), and
+ * draws a grid overlay reacting to {@link HomeScreenViewModel#showingGridState()}.
  * <p>
  * {@link #place} is deliberately not tied to any actual {@code DragEvent} —
  * the real drag-and-drop handler calls it with the drop coordinates, and so
@@ -580,14 +581,14 @@ final class CanvasController {
             double rawDeltaY = event.getSceneY() - pressScenePos[1];
             double[] delta = clampGroupDelta(dragStartPositions, rawDeltaX, rawDeltaY);
 
-            // Center-alignment guides only make sense for a single widget's
-            // own center - skip snapping (and hide the guides) for a group.
+            // Alignment guides only make sense for a single dragged widget -
+            // skip snapping (and hide the guides) for a group.
             if (dragStartPositions.size() == 1) {
                 double[] start = dragStartPositions.get(widgetId);
                 double width = node.prefWidth(-1);
                 double height = node.prefHeight(-1);
-                double snappedX = applyCenterGuide(start[0] + delta[0], width, canvasWidth(), verticalCenterGuide, true);
-                double snappedY = applyCenterGuide(start[1] + delta[1], height, canvasHeight(), horizontalCenterGuide, false);
+                double snappedX = applyAlignmentGuide(widgetId, start[0] + delta[0], width, canvasWidth(), verticalCenterGuide, true);
+                double snappedY = applyAlignmentGuide(widgetId, start[1] + delta[1], height, canvasHeight(), horizontalCenterGuide, false);
                 delta[0] = snappedX - start[0];
                 delta[1] = snappedY - start[1];
             } else {
@@ -678,39 +679,79 @@ final class CanvasController {
         };
     }
 
-    /**
-     * Checks whether the dragged widget's center on one axis lines up with
-     * that axis's canvas-center: within {@link #GUIDE_SHOW_DISTANCE}, shows
-     * {@code guide} (thin); within the tighter {@link #GUIDE_SNAP_DISTANCE},
-     * thickens it and snaps {@code position} to exactly centered. Returns the
-     * (possibly snapped) position to use.
-     */
-    private double applyCenterGuide(double position, double size, double canvasSize, Line guide, boolean vertical) {
-        double center = position + size / 2;
-        double canvasCenter = canvasSize / 2;
-        double distance = Math.abs(center - canvasCenter);
+    /** The three "roles" an edge/center can align on, expressed as a fraction of the widget's own size along the axis: left/top (0.0), center (0.5), right/bottom (1.0). */
+    private static final double[] ALIGNMENT_ROLES = {0.0, 0.5, 1.0};
 
-        if (distance > GUIDE_SHOW_DISTANCE) {
+    /**
+     * Finds the single closest alignment match for the dragged widget on one
+     * axis, across two candidate sources — the canvas's own center (compared
+     * against the widget's own center only, same as this always did), and
+     * every *other* placed widget's same-role edge/center (left-to-left,
+     * center-to-center, right-to-right — not cross-role, which is a
+     * different, spacing-oriented feature). Within {@link #GUIDE_SHOW_DISTANCE}
+     * of whichever candidate wins, shows {@code guide} at *that candidate's*
+     * coordinate (thin); within the tighter {@link #GUIDE_SNAP_DISTANCE},
+     * thickens it and snaps {@code position} to align exactly. Returns the
+     * (possibly snapped) position to use. Only ever called for a single
+     * dragged widget - {@code draggedWidgetId} is excluded from the
+     * "other widgets" comparison (aligning a widget with itself is
+     * meaningless), and every other widget's *live* position/size is read
+     * straight off its node, correct mid-drag since only the dragged widget
+     * moves this frame.
+     */
+    private double applyAlignmentGuide(String draggedWidgetId, double position, double size, double canvasSize, Line guide, boolean vertical) {
+        double bestDistance = Double.POSITIVE_INFINITY;
+        double bestTargetCoordinate = 0;
+        double bestPosition = position;
+
+        double myCenter = position + size / 2;
+        double canvasCenter = canvasSize / 2;
+        double centerDistance = Math.abs(myCenter - canvasCenter);
+        if (centerDistance < bestDistance) {
+            bestDistance = centerDistance;
+            bestTargetCoordinate = canvasCenter;
+            bestPosition = canvasCenter - size / 2;
+        }
+
+        for (var entry : nodesById.entrySet()) {
+            if (entry.getKey().equals(draggedWidgetId)) continue;
+            Node other = entry.getValue();
+            double otherPosition = vertical ? other.getLayoutX() : other.getLayoutY();
+            double otherSize = vertical ? other.prefWidth(-1) : other.prefHeight(-1);
+
+            for (double role : ALIGNMENT_ROLES) {
+                double myEdge = position + size * role;
+                double otherEdge = otherPosition + otherSize * role;
+                double distance = Math.abs(myEdge - otherEdge);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestTargetCoordinate = otherEdge;
+                    bestPosition = otherEdge - size * role;
+                }
+            }
+        }
+
+        if (bestDistance > GUIDE_SHOW_DISTANCE) {
             guide.setVisible(false);
             return position;
         }
 
-        boolean snapped = distance <= GUIDE_SNAP_DISTANCE;
+        boolean snapped = bestDistance <= GUIDE_SNAP_DISTANCE;
         guide.setStrokeWidth(snapped ? GUIDE_WIDTH_SNAPPED : GUIDE_WIDTH_NEAR);
         guide.setVisible(true);
         if (vertical) {
-            guide.setStartX(canvasCenter);
-            guide.setEndX(canvasCenter);
+            guide.setStartX(bestTargetCoordinate);
+            guide.setEndX(bestTargetCoordinate);
             guide.setStartY(0);
             guide.setEndY(canvasHeight());
         } else {
-            guide.setStartY(canvasCenter);
-            guide.setEndY(canvasCenter);
+            guide.setStartY(bestTargetCoordinate);
+            guide.setEndY(bestTargetCoordinate);
             guide.setStartX(0);
             guide.setEndX(canvasWidth());
         }
 
-        return snapped ? canvasCenter - size / 2 : position;
+        return snapped ? bestPosition : position;
     }
 
     private void hideGuides() {
