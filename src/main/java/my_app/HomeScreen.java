@@ -11,6 +11,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import megalodonte.base.components.Component;
+import megalodonte.base.components.IconInterface;
 import megalodonte.base.components.ScreenComponent;
 import megalodonte.base.theme.ThemeInterface;
 import megalodonte.base.theme.ThemeManager;
@@ -71,6 +72,7 @@ public class HomeScreen implements ScreenComponent {
 
         return new Container(new ContainerProps().fillHeight().bgColor(currentTheme.colors().background())).children(
                 new MenuBar().menu(new Menu("Options")
+                                .item(IconInterface.of(new FontIcon(FontAwesomeSolid.HEART)), "Support my Work", () -> viewModel.handleSupportWork())
                                 .item("New",()->viewModel.handleNew())
                                 .item("Load Skin",()->viewModel.handleLoad())
                                 .item("Load Layout",()->viewModel.handleLoadLayout())
@@ -81,16 +83,22 @@ public class HomeScreen implements ScreenComponent {
                         )
                         .trailing(themeToggleIcon(currentTheme)),
                 new SpacerVertical(10),
-                //workspace
-                new Row(new RowProps().fillHeight()).children(
-                        //canvasArea
-                        new Column(new ColumnProps().spacingOf(8).fillWidth()).children(
-                                CanvasSizeToolbar.build(viewModel),
-                                canva
+                new Container(new ContainerProps().paddingLeft(10).fillHeight()).children(
+                        //workspace
+                        new Row(new RowProps().fillHeight()).children(
+                                //canvasArea
+                                new Column(new ColumnProps().spacingOf(8).fillWidth()).children(
+                                        CanvasSizeToolbar.build(viewModel),
+                                        canva
+                                ),
+                                palette.asComponent()
                         ),
-                        palette.asComponent()
-                ),
-                buildStatusBar(viewModel, currentTheme)
+                        new Clickable(new Text("Developed By Eliezer Dev Software Enginner")).onClick(
+                                ()-> viewModel.handleSupportWork()
+                        ),
+                        new SpacerVertical(10),
+                        buildStatusBar(viewModel, currentTheme)
+                )
         );
     }
 

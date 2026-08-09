@@ -4,6 +4,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.FileChooser;
 import megalodonte.application.MegalodonteApp;
+import megalodonte.base.Redirect;
+import megalodonte.base.async.Async;
 import megalodonte.base.state.State;
 import megalodonte.base.theme.ThemeManager;
 import megalodonte.v2.ListState;
@@ -494,5 +496,9 @@ public class HomeScreenViewModel {
         }
         int next = max + 1;
         nextWidgetId.updateAndGet(current -> Math.max(current, next));
+    }
+
+    public void handleSupportWork() {
+        Redirect.to("https://buymeacoffee.com/eliezerdev");
     }
 }
