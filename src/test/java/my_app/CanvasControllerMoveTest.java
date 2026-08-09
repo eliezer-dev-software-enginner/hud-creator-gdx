@@ -63,6 +63,7 @@ class CanvasControllerMoveTest {
             viewModel.canvasWidthState().set(400);
             viewModel.canvasHeightState().set(300);
             viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+            viewModel.showingGridState().set(false); // this test is about the raw drag delta, not snap-to-grid
 
             Canva canva = new Canva();
             fixedSizePane(canva, 400, 300);

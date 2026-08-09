@@ -50,6 +50,7 @@ class CanvasControllerResizeTest {
             viewModel.canvasWidthState().set(400);
             viewModel.canvasHeightState().set(300);
             viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+            viewModel.showingGridState().set(false); // this test is about the raw resize delta, not snap-to-grid
 
             Canva canva = new Canva();
             fixedSizePane(canva, 400, 300);
@@ -88,6 +89,7 @@ class CanvasControllerResizeTest {
             viewModel.canvasWidthState().set(400);
             viewModel.canvasHeightState().set(300);
             viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+            viewModel.showingGridState().set(false); // MIN_WIDGET_SIZE (10) isn't a grid multiple - this test is about the size floor, not snap-to-grid
 
             Canva canva = new Canva();
             fixedSizePane(canva, 400, 300);

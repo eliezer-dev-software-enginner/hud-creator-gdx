@@ -169,6 +169,7 @@ class CanvasControllerAlignmentGuideTest {
             viewModel.canvasWidthState().set(400);
             viewModel.canvasHeightState().set(300);
             viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+            viewModel.showingGridState().set(false); // isolates this to alignment-guide behavior - grid snapping is a separate fallback, covered by its own tests
 
             Canva canva = new Canva();
             fixedSizePane(canva, 400, 300);

@@ -206,6 +206,10 @@ final class CanvasController {
             double maxHeight = Math.max(MIN_WIDGET_SIZE, canvasHeight() - node.getLayoutY());
             double newWidth = clamp(startSize[0] + deltaX, MIN_WIDGET_SIZE, maxWidth);
             double newHeight = clamp(startSize[1] + deltaY, MIN_WIDGET_SIZE, maxHeight);
+            if (viewModel.showingGridState().get()) {
+                newWidth = clamp(snapToGrid(newWidth), MIN_WIDGET_SIZE, maxWidth);
+                newHeight = clamp(snapToGrid(newHeight), MIN_WIDGET_SIZE, maxHeight);
+            }
 
             WidgetViews.resize(node, newWidth, newHeight);
             positionResizeHandle(node);
@@ -581,14 +585,27 @@ final class CanvasController {
             double rawDeltaY = event.getSceneY() - pressScenePos[1];
             double[] delta = clampGroupDelta(dragStartPositions, rawDeltaX, rawDeltaY);
 
-            // Alignment guides only make sense for a single dragged widget -
-            // skip snapping (and hide the guides) for a group.
+            // Alignment guides (and, below, grid snapping) only make sense
+            // for a single dragged widget - skip both (and hide the guides)
+            // for a group.
             if (dragStartPositions.size() == 1) {
                 double[] start = dragStartPositions.get(widgetId);
                 double width = node.prefWidth(-1);
                 double height = node.prefHeight(-1);
                 double snappedX = applyAlignmentGuide(widgetId, start[0] + delta[0], width, canvasWidth(), verticalCenterGuide, true);
                 double snappedY = applyAlignmentGuide(widgetId, start[1] + delta[1], height, canvasHeight(), horizontalCenterGuide, false);
+                // Grid snapping only kicks in on an axis the alignment guide
+                // didn't already claim - a guide match (even a "near but not
+                // yet snapped" one, still shown thin) is more specific/
+                // intentional than a generic grid line, so it wins outright.
+                if (viewModel.showingGridState().get()) {
+                    if (!verticalCenterGuide.isVisible()) {
+                        snappedX = clamp(snapToGrid(snappedX), 0, Math.max(0, canvasWidth() - width));
+                    }
+                    if (!horizontalCenterGuide.isVisible()) {
+                        snappedY = clamp(snapToGrid(snappedY), 0, Math.max(0, canvasHeight() - height));
+                    }
+                }
                 delta[0] = snappedX - start[0];
                 delta[1] = snappedY - start[1];
             } else {
@@ -821,5 +838,10 @@ final class CanvasController {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    /** Rounds {@code value} to the nearest multiple of {@link #GRID_SPACING} - the move/resize handles' snap-to-grid write path, active only while {@link HomeScreenViewModel#showingGridState()} is on. */
+    private static double snapToGrid(double value) {
+        return Math.round(value / GRID_SPACING) * GRID_SPACING;
     }
 }
