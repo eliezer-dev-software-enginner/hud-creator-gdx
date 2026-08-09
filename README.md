@@ -33,7 +33,7 @@ repositories {
     maven { url = uri("https://jitpack.io") }
 }
 dependencies {
-    implementation("com.github.eliezer-dev-software-enginner:scene2d-hud-loader:v1.0.0-beta")
+    implementation("com.github.eliezer-dev-software-enginner:scene2d-hud-loader:v1.0.1-beta")
 }
 ```
 
