@@ -28,6 +28,8 @@ import org.kordamp.ikonli.Ikon;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+import java.util.Set;
+
 public class HomeScreen implements ScreenComponent {
 
     private final HomeScreenViewModel viewModel;
@@ -51,7 +53,7 @@ public class HomeScreen implements ScreenComponent {
                 .borderWidth(1)
                 // Clicking empty canvas (not a widget - those consume their own click,
                 // see CanvasController) deselects, closing the "Properties" panel.
-                .onClick(() -> viewModel.selectedWidgetIdState().set(null)));
+                .onClick(() -> viewModel.selectedWidgetIdsState().set(Set.of())));
         bindCanvasSize(canva, viewModel);
         bindCanvasBackgroundImage(canva, viewModel, currentTheme);
 

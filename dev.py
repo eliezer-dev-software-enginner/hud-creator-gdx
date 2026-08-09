@@ -1,6 +1,7 @@
 import hashlib
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 ROOT = Path(__file__).resolve().parent
-WATCH_DIRS = ["src/main/java", "src/main/resources"]
+WATCH_DIRS = [ROOT / "src/main/java", ROOT / "src/main/resources"]
 GRADLE_RUN = ["./gradlew", "run"] if sys.platform != "win32" else ["gradlew.bat", "run"]
 DEBOUNCE_SECONDS = 1.5
 
@@ -17,6 +18,7 @@ DEBOUNCE_SECONDS = 1.5
 IGNORED_NAME_MARKERS = ("___jb_tmp___", "___jb_old___", ".swp", ".swx", "~")
 
 process = None
+process_lock = threading.Lock()
 
 
 def is_noise(path_str: str) -> bool:
@@ -37,16 +39,22 @@ def content_hash(path_str: str):
 class ChangeHandler(FileSystemEventHandler):
     """
     Só reinicia quando o CONTEÚDO de um arquivo realmente muda — não a qualquer
-    evento de sistema de arquivos. Isso é o que faltava: o IntelliJ salva (ou
-    "re-salva" sem mudança nenhuma) todos os arquivos abertos ao perder foco da
-    janela ("Save on frame deactivation"), e faz isso via write-num-temp +
-    rename-por-cima (aparece pro watchdog como um evento "moved"). Cada um desses
-    disparava um restart mesmo sem nada ter mudado de verdade.
+    evento de sistema de arquivos. O IntelliJ salva (ou "re-salva" sem mudança
+    nenhuma) todos os arquivos abertos ao perder foco da janela ("Save on frame
+    deactivation"), via write-num-temp + rename-por-cima (evento "moved" pro
+    watchdog). Cada um desses disparava um restart mesmo sem nada ter mudado.
+
+    O restart em si é debounced de verdade: uma rajada de eventos (ex.: "Save
+    All" salvando 10 arquivos de uma vez) reinicia UMA vez só, depois que os
+    eventos pararem de chegar por DEBOUNCE_SECONDS — em vez de só ignorar
+    tudo que cair dentro da janela e potencialmente nunca reiniciar.
     """
 
-    def __init__(self):
-        self.last_change = 0
+    def __init__(self, on_settled):
         self.known_hashes = {}
+        self.on_settled = on_settled
+        self._timer = None
+        self._timer_lock = threading.Lock()
 
     def on_any_event(self, event):
         if event.is_directory:
@@ -70,13 +78,22 @@ class ChangeHandler(FileSystemEventHandler):
             changed = self.known_hashes.get(target_path) != new_hash
             self.known_hashes[target_path] = new_hash
 
-        if not changed:
-            return
+        if changed:
+            self._schedule_restart()
 
-        now = time.time()
-        if now - self.last_change > DEBOUNCE_SECONDS:
-            self.last_change = now
-            restart()
+    def _schedule_restart(self):
+        with self._timer_lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(DEBOUNCE_SECONDS, self.on_settled)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def cancel_pending(self):
+        with self._timer_lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
 
 
 def start():
@@ -87,7 +104,8 @@ def start():
 
 def kill_process():
     global process
-    if process is None:
+    if process is None or process.poll() is not None:
+        process = None
         return
 
     if sys.platform == "win32":
@@ -96,6 +114,7 @@ def kill_process():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
+        process.wait()
     else:
         process.terminate()
         process.wait()
@@ -104,9 +123,12 @@ def kill_process():
 
 
 def restart():
-    print("[dev] Mudança detectada — reiniciando...")
-    kill_process()
-    start()
+    # o timer do debounce dispara numa thread separada da do observer,
+    # então travamos pra garantir que só um restart roda por vez.
+    with process_lock:
+        print("[dev] Mudança detectada — reiniciando...")
+        kill_process()
+        start()
 
 
 if __name__ == "__main__":
@@ -115,18 +137,27 @@ if __name__ == "__main__":
     # chamado a partir de Main.java — e não mais daqui, pra valer também rodando
     # direto pela IDE, sem passar por este script.
     start()
+
     observer = Observer()
-    handler = ChangeHandler()
+    handler = ChangeHandler(on_settled=restart)
+
+    watched = []
     for d in WATCH_DIRS:
-        observer.schedule(handler, d, recursive=True)
+        if not d.exists():
+            print(f"[dev] Aviso: diretório não encontrado, ignorando: {d}")
+            continue
+        observer.schedule(handler, str(d), recursive=True)
+        watched.append(str(d))
+
     observer.start()
-    print(f"[dev] Monitorando: {WATCH_DIRS} (Ctrl+C para sair)")
+    print(f"[dev] Monitorando: {watched} (Ctrl+C para sair)")
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("[dev] Encerrando...")
-        if process:
-            process.terminate()
+        handler.cancel_pending()
+        with process_lock:
+            kill_process()
         observer.stop()
     observer.join()

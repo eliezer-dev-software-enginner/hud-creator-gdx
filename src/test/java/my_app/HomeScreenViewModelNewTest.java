@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -48,7 +49,7 @@ class HomeScreenViewModelNewTest {
             viewModel.backgroundImagePathState().set(EXAMPLE_SKIN.toAbsolutePath().toString());
             controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
             String placedId = viewModel.placedWidgets().get().get(0).id();
-            viewModel.selectedWidgetIdState().set(placedId);
+            viewModel.selectedWidgetIdsState().set(Set.of(placedId));
 
             assertEquals(1, viewModel.placedWidgets().get().size(), "sanity check: widget was actually placed");
             assertTrue(viewModel.nextWidgetId().startsWith("widget-2"), "sanity check: counter advanced past 1");
@@ -62,7 +63,7 @@ class HomeScreenViewModelNewTest {
             assertEquals(360, viewModel.canvasHeightState().get(), "canvas height back to default");
             assertEquals(0, viewModel.placedWidgets().get().size(), "canvas should be cleared");
             assertNull(controller.nodeFor(placedId), "the placed widget's node should be gone from the Canva too");
-            assertNull(viewModel.selectedWidgetIdState().get(), "selection should be cleared");
+            assertTrue(viewModel.selectedWidgetIdsState().get().isEmpty(), "selection should be cleared");
             assertEquals("", viewModel.statusMessageState().get(), "status message should be cleared");
             assertEquals("widget-1", viewModel.nextWidgetId(), "widget id counter should restart from 1");
         });

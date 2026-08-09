@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class HomeScreenViewModel {
@@ -36,7 +37,7 @@ public class HomeScreenViewModel {
     private final ListState<PlacedWidget> placedWidgets = ListState.ofEmpty();
     private final AtomicInteger nextWidgetId = new AtomicInteger(1);
     private final State<String> statusMessage = State.of("");
-    private final State<String> selectedWidgetId = State.of(null);
+    private final State<Set<String>> selectedWidgetIds = State.of(Set.of());
     private final State<Boolean> showingGrid = State.of(true);
     private final State<String> backgroundImagePath = State.of(null);
     private CanvasController canvasController; // set once by HomeScreen, after both it and the Canva exist
@@ -179,9 +180,15 @@ public class HomeScreenViewModel {
         return statusMessage;
     }
 
-    /** Id of the widget currently selected on the Canva (click to select, click empty canvas to deselect), or null. Drives the "Properties" panel. */
-    public State<String> selectedWidgetIdState() {
-        return selectedWidgetId;
+    /**
+     * Ids of every widget currently selected on the Canva - empty when
+     * nothing's selected. A plain click replaces the selection with one
+     * widget; Shift/Ctrl(Cmd)+click toggles a widget in or out of it; click
+     * empty canvas clears it. Drives the "Properties" panel and which
+     * widgets the selection glow/resize handle apply to.
+     */
+    public State<Set<String>> selectedWidgetIdsState() {
+        return selectedWidgetIds;
     }
 
     /** Whether the alignment grid overlay is shown on the Canva. Toggled by the "Grid" checkbox in {@link CanvasSizeToolbar}. */

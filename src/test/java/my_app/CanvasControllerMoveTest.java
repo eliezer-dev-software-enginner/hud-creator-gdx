@@ -17,10 +17,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -209,14 +211,226 @@ class CanvasControllerMoveTest {
             Node second = controller.nodeFor(secondId);
 
             fire(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
-            assertEquals(firstId, viewModel.selectedWidgetIdState().get());
+            assertEquals(Set.of(firstId), viewModel.selectedWidgetIdsState().get());
             assertNotNull(first.getEffect(), "selected widget should be highlighted");
             assertNull(second.getEffect(), "unselected widget shouldn't be highlighted");
 
             fire(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
-            assertEquals(secondId, viewModel.selectedWidgetIdState().get());
+            assertEquals(Set.of(secondId), viewModel.selectedWidgetIdsState().get());
             assertNull(first.getEffect(), "highlight should move off the previously selected widget");
             assertNotNull(second.getEffect());
+        });
+    }
+
+    @Test
+    void shiftClickAddsToTheSelectionAndShiftClickingItAgainRemovesJustIt() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
+            controller.place(new WidgetSpec.ButtonSpec("toggle"), 200, 100);
+
+            String firstId = viewModel.placedWidgets().get().get(0).id();
+            String secondId = viewModel.placedWidgets().get().get(1).id();
+            Node first = controller.nodeFor(firstId);
+            Node second = controller.nodeFor(secondId);
+
+            fire(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
+            assertEquals(Set.of(firstId), viewModel.selectedWidgetIdsState().get());
+
+            fireShiftClick(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
+            assertEquals(Set.of(firstId, secondId), viewModel.selectedWidgetIdsState().get(),
+                    "shift-click should add to the selection, not replace it");
+            assertNotNull(first.getEffect(), "first widget should stay highlighted too");
+            assertNotNull(second.getEffect());
+
+            fireShiftClick(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
+            assertEquals(Set.of(firstId), viewModel.selectedWidgetIdsState().get(),
+                    "shift-clicking an already-selected widget should remove just it");
+        });
+    }
+
+    @Test
+    void plainClickOnAnUnselectedWidgetReplacesAMultiSelection() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
+            controller.place(new WidgetSpec.ButtonSpec("toggle"), 200, 100);
+            controller.place(new WidgetSpec.ButtonSpec("play"), 300, 200);
+
+            String firstId = viewModel.placedWidgets().get().get(0).id();
+            String secondId = viewModel.placedWidgets().get().get(1).id();
+            String thirdId = viewModel.placedWidgets().get().get(2).id();
+            Node first = controller.nodeFor(firstId);
+            Node second = controller.nodeFor(secondId);
+            Node third = controller.nodeFor(thirdId);
+
+            fire(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
+            fireShiftClick(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
+            assertEquals(Set.of(firstId, secondId), viewModel.selectedWidgetIdsState().get());
+
+            fire(third.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, third.getLayoutX(), third.getLayoutY());
+            assertEquals(Set.of(thirdId), viewModel.selectedWidgetIdsState().get(),
+                    "plain click on an unselected widget should replace the whole selection");
+        });
+    }
+
+    @Test
+    void draggingOneOfAMultiSelectionMovesTheWholeGroupTogether() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
+            controller.place(new WidgetSpec.ButtonSpec("toggle"), 200, 100);
+
+            String firstId = viewModel.placedWidgets().get().get(0).id();
+            String secondId = viewModel.placedWidgets().get().get(1).id();
+            Node first = controller.nodeFor(firstId);
+            Node second = controller.nodeFor(secondId);
+            double firstStartX = first.getLayoutX(), firstStartY = first.getLayoutY();
+            double secondStartX = second.getLayoutX(), secondStartY = second.getLayoutY();
+
+            fire(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
+            fireShiftClick(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
+            assertEquals(Set.of(firstId, secondId), viewModel.selectedWidgetIdsState().get());
+
+            // Continues the same gesture the shift-click press above started on "second" -
+            // its own dragStartPositions already captured both widgets' starting spots.
+            fire(second.getOnMouseDragged(), MouseEvent.MOUSE_DRAGGED, second.getLayoutX() + 20, second.getLayoutY() + 10);
+
+            assertEquals(firstStartX + 20, first.getLayoutX(), 0.01, "the other selected widget should move by the same delta");
+            assertEquals(firstStartY + 10, first.getLayoutY(), 0.01);
+            assertEquals(secondStartX + 20, second.getLayoutX(), 0.01, "the dragged widget itself should move normally");
+            assertEquals(secondStartY + 10, second.getLayoutY(), 0.01);
+        });
+    }
+
+    @Test
+    void draggingAGroupClampsTogetherAtTheTightestEdgeInsteadOfIndependently() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(200);
+            viewModel.canvasHeightState().set(120);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 200, 120);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ImageSpec("arrow"), 20, 20);
+            controller.place(new WidgetSpec.ImageSpec("arrow"), 20, 20);
+
+            String leftId = viewModel.placedWidgets().get().get(0).id();
+            String rightId = viewModel.placedWidgets().get().get(1).id();
+            Node left = controller.nodeFor(leftId);
+            Node right = controller.nodeFor(rightId);
+            double width = right.prefWidth(-1);
+
+            // Position them precisely, "right" much closer to the canvas's right edge -
+            // it's the tighter bound once the group is dragged that direction.
+            left.setLayoutX(50);
+            left.setLayoutY(20);
+            right.setLayoutX(150);
+            right.setLayoutY(20);
+            double leftStartX = left.getLayoutX();
+            double rightStartX = right.getLayoutX();
+
+            fire(left.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, left.getLayoutX(), left.getLayoutY());
+            fireShiftClick(right.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, right.getLayoutX(), right.getLayoutY());
+
+            // Drag way past the right edge.
+            fire(right.getOnMouseDragged(), MouseEvent.MOUSE_DRAGGED, right.getLayoutX() + 1000, right.getLayoutY());
+
+            double expectedDelta = 200 - width - rightStartX;
+            assertEquals(rightStartX + expectedDelta, right.getLayoutX(), 0.01,
+                    "the tighter widget should land exactly at the canvas edge");
+            assertEquals(leftStartX + expectedDelta, left.getLayoutX(), 0.01,
+                    "the other widget should keep the exact same relative offset, not clamp independently to its own (looser) edge");
+        });
+    }
+
+    @Test
+    void resizeHandleHidesWithMultipleSelectedAndReappearsBackToOne() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
+            controller.place(new WidgetSpec.ButtonSpec("toggle"), 200, 100);
+
+            String firstId = viewModel.placedWidgets().get().get(0).id();
+            String secondId = viewModel.placedWidgets().get().get(1).id();
+            Node first = controller.nodeFor(firstId);
+            Node second = controller.nodeFor(secondId);
+
+            fire(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
+            assertTrue(controller.resizeHandle().isVisible(), "one resizable widget selected - handle should show");
+
+            fireShiftClick(second.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, second.getLayoutX(), second.getLayoutY());
+            assertFalse(controller.resizeHandle().isVisible(), "two widgets selected - handle should hide");
+
+            fireShiftClick(first.getOnMousePressed(), MouseEvent.MOUSE_PRESSED, first.getLayoutX(), first.getLayoutY());
+            assertEquals(Set.of(secondId), viewModel.selectedWidgetIdsState().get());
+            assertTrue(controller.resizeHandle().isVisible(), "back to exactly one selected - handle should reappear");
+        });
+    }
+
+    @Test
+    void deletingWithMultipleWidgetsSelectedRemovesAllOfThem() throws Exception {
+        runOnFxThreadAndWait(() -> {
+            HomeScreenViewModel viewModel = new HomeScreenViewModel();
+            viewModel.canvasWidthState().set(400);
+            viewModel.canvasHeightState().set(300);
+            viewModel.skinState().set(SkinLoader.load(EXAMPLE_SKIN));
+
+            Canva canva = new Canva();
+            Region pane = fixedSizePane(canva, 400, 300);
+
+            CanvasController controller = new CanvasController(canva, viewModel);
+            controller.place(new WidgetSpec.ButtonSpec("default"), 60, 40);
+            controller.place(new WidgetSpec.ButtonSpec("toggle"), 200, 100);
+            String firstId = viewModel.placedWidgets().get().get(0).id();
+            String secondId = viewModel.placedWidgets().get().get(1).id();
+
+            fire(controller.nodeFor(firstId).getOnMousePressed(), MouseEvent.MOUSE_PRESSED, 0, 0);
+            fireShiftClick(controller.nodeFor(secondId).getOnMousePressed(), MouseEvent.MOUSE_PRESSED, 0, 0);
+            assertEquals(Set.of(firstId, secondId), viewModel.selectedWidgetIdsState().get());
+
+            pane.getOnKeyPressed().handle(new KeyEvent(
+                    KeyEvent.KEY_PRESSED, "", "", KeyCode.DELETE, false, false, false, false));
+
+            assertEquals(0, viewModel.placedWidgets().get().size(), "Delete should remove every selected widget");
+            assertTrue(viewModel.selectedWidgetIdsState().get().isEmpty());
+            assertNull(controller.nodeFor(firstId));
+            assertNull(controller.nodeFor(secondId));
         });
     }
 
@@ -238,14 +452,14 @@ class CanvasControllerMoveTest {
             String secondId = viewModel.placedWidgets().get().get(1).id();
 
             fire(controller.nodeFor(firstId).getOnMousePressed(), MouseEvent.MOUSE_PRESSED, 0, 0);
-            assertEquals(firstId, viewModel.selectedWidgetIdState().get());
+            assertEquals(Set.of(firstId), viewModel.selectedWidgetIdsState().get());
 
             controller.removeWidget(firstId);
 
             assertEquals(1, viewModel.placedWidgets().get().size());
             assertEquals(secondId, viewModel.placedWidgets().get().get(0).id());
             assertNull(controller.nodeFor(firstId), "removed widget's node should be forgotten");
-            assertNull(viewModel.selectedWidgetIdState().get(), "removing the selected widget should clear the selection");
+            assertTrue(viewModel.selectedWidgetIdsState().get().isEmpty(), "removing the selected widget should clear the selection");
             assertTrue(((javafx.scene.layout.Pane) pane).getChildren().contains(controller.nodeFor(secondId)),
                     "the other widget should still be on the canvas");
         });
@@ -273,7 +487,7 @@ class CanvasControllerMoveTest {
                     KeyEvent.KEY_PRESSED, "", "", KeyCode.DELETE, false, false, false, false));
 
             assertEquals(0, viewModel.placedWidgets().get().size(), "Delete should have removed the selected widget");
-            assertNull(viewModel.selectedWidgetIdState().get());
+            assertTrue(viewModel.selectedWidgetIdsState().get().isEmpty());
         });
     }
 
@@ -363,6 +577,15 @@ class CanvasControllerMoveTest {
         handler.handle(new MouseEvent(type,
                 x, y, x, y, MouseButton.PRIMARY, 1,
                 false, false, false, false,
+                true, false, false,
+                false, false, false, null));
+    }
+
+    /** Same as {@link #fire}, but with {@code shiftDown} set - the additive (toggle-in-selection) modifier {@link CanvasController#updateSelectionOnPress} reads via {@code isShiftDown()}. */
+    private static void fireShiftClick(EventHandler<? super MouseEvent> handler, EventType<MouseEvent> type, double x, double y) {
+        handler.handle(new MouseEvent(type,
+                x, y, x, y, MouseButton.PRIMARY, 1,
+                true, false, false, false,
                 true, false, false,
                 false, false, false, null));
     }

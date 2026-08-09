@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -87,7 +88,7 @@ class CanvasControllerSelectionEffectTest {
             controller.setSize(id, 45, 30);
             assertInstanceOf(DropShadow.class, node.getEffect(), "resizing while selected shouldn't disturb the glow/tint composition");
 
-            viewModel.selectedWidgetIdState().set(null);
+            viewModel.selectedWidgetIdsState().set(Set.of());
             assertSame(originalTint, node.getEffect(), "deselecting should restore the exact same tint, not null");
         });
     }
@@ -113,7 +114,7 @@ class CanvasControllerSelectionEffectTest {
             DropShadow glow = assertInstanceOf(DropShadow.class, node.getEffect());
             assertNull(glow.getInput(), "nothing to wrap - the glow's input should stay unset");
 
-            viewModel.selectedWidgetIdState().set(null);
+            viewModel.selectedWidgetIdsState().set(Set.of());
             assertNull(node.getEffect(), "deselecting an untinted button should go back to no effect at all");
         });
     }

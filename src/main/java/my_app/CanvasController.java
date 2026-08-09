@@ -24,8 +24,10 @@ import my_app.widget.WidgetSpec;
 import my_app.widget.render.WidgetViews;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Places {@link WidgetSpec}s onto the Canva — either one at a time, centered
@@ -35,9 +37,10 @@ import java.util.Map;
  * each, and makes every placed node draggable within the canvas afterward
  * (plain mouse-press/drag, updating {@code layoutX}/{@code layoutY} directly
  * — separate from the Dragboard-based drag used to drop a *new* widget in
- * from the palette) plus selectable — pressing a widget sets
- * {@link HomeScreenViewModel#selectedWidgetIdState()}, which highlights it
- * here and drives the "Properties" panel (nickname editing) in
+ * from the palette) plus selectable — pressing a widget updates
+ * {@link HomeScreenViewModel#selectedWidgetIdsState()} (Shift/Ctrl+click adds
+ * to the selection instead of replacing it), which highlights every selected
+ * widget here and drives the "Properties" panel (nickname editing) in
  * {@link SkinPalettePanel} — shows center-alignment guides while dragging
  * (see {@link #applyCenterGuide}), and draws a grid overlay reacting to
  * {@link HomeScreenViewModel#showingGridState()}.
@@ -84,7 +87,7 @@ final class CanvasController {
     CanvasController(Canva canva, HomeScreenViewModel viewModel) {
         this.canva = canva;
         this.viewModel = viewModel;
-        viewModel.selectedWidgetIdState().subscribe(this::applySelectionHighlight);
+        viewModel.selectedWidgetIdsState().subscribe(this::applySelectionHighlight);
         setUpGrid();
         setUpGuides();
         setUpResizeHandle();
@@ -92,7 +95,7 @@ final class CanvasController {
     }
 
     /**
-     * Deletes the selected widget on Delete/Backspace. Keyboard events only
+     * Deletes every selected widget on Delete/Backspace. Keyboard events only
      * reach a node that has focus, and the Canva's Pane isn't focus-traversable
      * or focused by default (it's a plain Pane, not a Control) — so widget
      * selection ({@link #makeMovable}'s press handler) also requests focus on
@@ -104,9 +107,8 @@ final class CanvasController {
         pane.setOnKeyPressed(event -> {
             if (event.getCode() != KeyCode.DELETE && event.getCode() != KeyCode.BACK_SPACE) return;
 
-            String selectedId = viewModel.selectedWidgetIdState().get();
-            if (selectedId != null) {
-                removeWidget(selectedId);
+            if (!viewModel.selectedWidgetIdsState().get().isEmpty()) {
+                removeSelectedWidgets();
                 event.consume();
             }
         });
@@ -194,10 +196,10 @@ final class CanvasController {
         });
 
         resizeHandle.setOnMouseReleased(event -> {
-            Node node = selectedNode();
+            String selectedId = soleSelectedId();
+            Node node = selectedId == null ? null : nodesById.get(selectedId);
             if (node == null) return;
 
-            String selectedId = viewModel.selectedWidgetIdState().get();
             double finalWidth = node.prefWidth(-1);
             double finalHeight = node.prefHeight(-1);
             viewModel.placedWidgets().updateIf(
@@ -210,8 +212,14 @@ final class CanvasController {
         resizeHandle.setOnMouseClicked(Event::consume);
     }
 
+    /** The id of the sole selected widget, or {@code null} when zero or more than one is selected - resizing (and its handle) only make sense for exactly one at a time. */
+    private String soleSelectedId() {
+        Set<String> selected = viewModel.selectedWidgetIdsState().get();
+        return selected.size() == 1 ? selected.iterator().next() : null;
+    }
+
     private Node selectedNode() {
-        String selectedId = viewModel.selectedWidgetIdState().get();
+        String selectedId = soleSelectedId();
         return selectedId == null ? null : nodesById.get(selectedId);
     }
 
@@ -259,7 +267,7 @@ final class CanvasController {
         nodesById.clear();
         textViewsById.clear();
         baseEffectById.clear();
-        viewModel.selectedWidgetIdState().set(null);
+        viewModel.selectedWidgetIdsState().set(Set.of());
     }
 
     /** Sets or clears a widget's nickname — called live as the user types in the "Properties" panel, so no status-bar spam per keystroke. */
@@ -356,7 +364,7 @@ final class CanvasController {
         double clampedHeight = clamp(height, MIN_WIDGET_SIZE, maxHeight);
 
         WidgetViews.resize(node, clampedWidth, clampedHeight);
-        if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
+        if (viewModel.selectedWidgetIdsState().get().contains(widgetId)) {
             positionResizeHandle(node);
         }
 
@@ -365,7 +373,7 @@ final class CanvasController {
                 w -> new PlacedWidget(w.id(), w.spec(), w.x(), w.y(), w.nickname(), clampedWidth, clampedHeight));
     }
 
-    /** Removes one widget from the canvas — wired to Delete/Backspace in {@link #setUpDeleteKey}, but plain enough to call directly (tests, future "Remove" menu item, etc). */
+    /** Removes one widget from the canvas — the building block {@link #removeSelectedWidgets} (Delete/Backspace) loops, but plain enough to call directly too (tests, future "Remove" menu item, etc). */
     void removeWidget(String widgetId) {
         Node node = nodesById.remove(widgetId);
         if (node == null) return;
@@ -374,10 +382,22 @@ final class CanvasController {
         textViewsById.remove(widgetId);
         baseEffectById.remove(widgetId);
         viewModel.placedWidgets().removeIf(w -> w.id().equals(widgetId));
+        deselect(widgetId);
+    }
 
-        if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
-            viewModel.selectedWidgetIdState().set(null);
-        }
+    /** Removes every currently-selected widget — the Delete/Backspace key's bulk write path ({@link #setUpDeleteKey}). Snapshots the selection first since {@link #removeWidget} mutates it as it goes. */
+    private void removeSelectedWidgets() {
+        Set<String> toRemove = Set.copyOf(viewModel.selectedWidgetIdsState().get());
+        toRemove.forEach(this::removeWidget);
+    }
+
+    /** Removes just {@code widgetId} from the current selection, if it's part of it — leaves the rest of a multi-selection intact, unlike replacing the whole selection with {@code null}/empty. */
+    private void deselect(String widgetId) {
+        Set<String> current = viewModel.selectedWidgetIdsState().get();
+        if (!current.contains(widgetId)) return;
+        Set<String> updated = new LinkedHashSet<>(current);
+        updated.remove(widgetId);
+        viewModel.selectedWidgetIdsState().set(Set.copyOf(updated));
     }
 
     /** The JavaFX node for a placed widget id, or null — used by tests instead of indexing into the Canva's Pane children (which also holds the guide lines). */
@@ -434,37 +454,67 @@ final class CanvasController {
         makeMovable(node, id);
     }
 
-    /** Lets an already-placed {@code node} be selected (click/press) and dragged around the canvas by mouse, clamped to stay fully inside it and snapping to the canvas's center guides. */
+    /**
+     * Lets an already-placed {@code node} be selected (click/press) and
+     * dragged around the canvas by mouse. Every currently-selected widget
+     * moves together as a group (not just {@code node}) — {@code node}'s own
+     * handlers are the only ones that fire during this gesture (the mouse
+     * only ever presses on one node at a time), so they drive every other
+     * selected widget's position too, via {@link #nodesById}.
+     */
     private void makeMovable(Node node, String widgetId) {
         node.setCursor(Cursor.MOVE);
 
-        // Offset between the mouse-press point and the node's layoutX/Y, in
-        // scene coordinates - scene and pane-local space differ by a fixed
-        // translation here (no scale/rotate anywhere in this UI), so plain
-        // scene-coordinate deltas already equal pane-local deltas.
-        double[] pressOffset = new double[2];
+        double[] pressScenePos = new double[2];
+        // Each selected widget's own (layoutX, layoutY) at the moment the
+        // drag started - a group drag applies the exact same delta to every
+        // one of these, so relative positions never drift apart.
+        Map<String, double[]> dragStartPositions = new HashMap<>();
 
         node.setOnMousePressed(event -> {
-            viewModel.selectedWidgetIdState().set(widgetId);
+            updateSelectionOnPress(widgetId, event.isShiftDown() || event.isShortcutDown());
             ((Pane) canva.getNode()).requestFocus(); // so the Delete/Backspace handler in setUpDeleteKey actually receives key events
-            pressOffset[0] = event.getSceneX() - node.getLayoutX();
-            pressOffset[1] = event.getSceneY() - node.getLayoutY();
+
+            pressScenePos[0] = event.getSceneX();
+            pressScenePos[1] = event.getSceneY();
+            dragStartPositions.clear();
+            for (String id : viewModel.selectedWidgetIdsState().get()) {
+                Node selectedNode = nodesById.get(id);
+                if (selectedNode != null) {
+                    dragStartPositions.put(id, new double[]{selectedNode.getLayoutX(), selectedNode.getLayoutY()});
+                }
+            }
             event.consume();
         });
 
         node.setOnMouseDragged(event -> {
-            double width = node.prefWidth(-1);
-            double height = node.prefHeight(-1);
+            if (dragStartPositions.isEmpty()) return;
 
-            double newX = clamp(event.getSceneX() - pressOffset[0], 0, Math.max(0, canvasWidth() - width));
-            double newY = clamp(event.getSceneY() - pressOffset[1], 0, Math.max(0, canvasHeight() - height));
+            double rawDeltaX = event.getSceneX() - pressScenePos[0];
+            double rawDeltaY = event.getSceneY() - pressScenePos[1];
+            double[] delta = clampGroupDelta(dragStartPositions, rawDeltaX, rawDeltaY);
 
-            newX = applyCenterGuide(newX, width, canvasWidth(), verticalCenterGuide, true);
-            newY = applyCenterGuide(newY, height, canvasHeight(), horizontalCenterGuide, false);
+            // Center-alignment guides only make sense for a single widget's
+            // own center - skip snapping (and hide the guides) for a group.
+            if (dragStartPositions.size() == 1) {
+                double[] start = dragStartPositions.get(widgetId);
+                double width = node.prefWidth(-1);
+                double height = node.prefHeight(-1);
+                double snappedX = applyCenterGuide(start[0] + delta[0], width, canvasWidth(), verticalCenterGuide, true);
+                double snappedY = applyCenterGuide(start[1] + delta[1], height, canvasHeight(), horizontalCenterGuide, false);
+                delta[0] = snappedX - start[0];
+                delta[1] = snappedY - start[1];
+            } else {
+                hideGuides();
+            }
 
-            node.setLayoutX(newX);
-            node.setLayoutY(newY);
-            if (widgetId.equals(viewModel.selectedWidgetIdState().get())) {
+            for (var entry : dragStartPositions.entrySet()) {
+                Node selectedNode = nodesById.get(entry.getKey());
+                if (selectedNode == null) continue;
+                selectedNode.setLayoutX(entry.getValue()[0] + delta[0]);
+                selectedNode.setLayoutY(entry.getValue()[1] + delta[1]);
+            }
+            if (dragStartPositions.size() == 1) {
                 positionResizeHandle(node);
             }
             event.consume();
@@ -472,14 +522,74 @@ final class CanvasController {
 
         node.setOnMouseReleased(event -> {
             hideGuides();
-            viewModel.placedWidgets().updateIf(
-                    w -> w.id().equals(widgetId),
-                    w -> new PlacedWidget(w.id(), w.spec(), node.getLayoutX(), node.getLayoutY(), w.nickname(), w.width(), w.height()));
+            for (String id : dragStartPositions.keySet()) {
+                Node selectedNode = nodesById.get(id);
+                if (selectedNode == null) continue;
+                double finalX = selectedNode.getLayoutX();
+                double finalY = selectedNode.getLayoutY();
+                viewModel.placedWidgets().updateIf(
+                        w -> w.id().equals(id),
+                        w -> new PlacedWidget(w.id(), w.spec(), finalX, finalY, w.nickname(), w.width(), w.height()));
+            }
             event.consume();
         });
 
         // Stops the click from bubbling to the Canva's background handler, which would deselect right after selecting.
         node.setOnMouseClicked(Event::consume);
+    }
+
+    /**
+     * Updates the selection for a mouse-press on {@code widgetId}:
+     * Shift/Ctrl(Cmd)+click toggles it in or out of the current selection; a
+     * plain click on a widget that's *not* already selected replaces the
+     * selection with just it; a plain click on a widget that's *already*
+     * selected leaves the (possibly multi-widget) selection alone, so the
+     * drag that follows can move the whole group together instead of
+     * collapsing it to one widget.
+     */
+    private void updateSelectionOnPress(String widgetId, boolean additive) {
+        Set<String> current = viewModel.selectedWidgetIdsState().get();
+        if (additive) {
+            Set<String> updated = new LinkedHashSet<>(current);
+            if (!updated.remove(widgetId)) {
+                updated.add(widgetId);
+            }
+            viewModel.selectedWidgetIdsState().set(Set.copyOf(updated));
+        } else if (!current.contains(widgetId)) {
+            viewModel.selectedWidgetIdsState().set(Set.of(widgetId));
+        }
+    }
+
+    /**
+     * Clamps a proposed {@code (deltaX, deltaY)} drag so that *every* widget
+     * in {@code startPositions} stays fully inside the canvas — the tightest
+     * bound across the whole group wins, so a multi-widget drag preserves
+     * every member's position relative to the others exactly, rather than
+     * clamping each one independently (which would let the group drift out
+     * of alignment as soon as any single widget hit an edge).
+     */
+    private double[] clampGroupDelta(Map<String, double[]> startPositions, double deltaX, double deltaY) {
+        double minDx = Double.NEGATIVE_INFINITY, maxDx = Double.POSITIVE_INFINITY;
+        double minDy = Double.NEGATIVE_INFINITY, maxDy = Double.POSITIVE_INFINITY;
+
+        for (var entry : startPositions.entrySet()) {
+            Node selectedNode = nodesById.get(entry.getKey());
+            if (selectedNode == null) continue;
+            double startX = entry.getValue()[0];
+            double startY = entry.getValue()[1];
+            double width = selectedNode.prefWidth(-1);
+            double height = selectedNode.prefHeight(-1);
+
+            minDx = Math.max(minDx, -startX);
+            maxDx = Math.min(maxDx, canvasWidth() - width - startX);
+            minDy = Math.max(minDy, -startY);
+            maxDy = Math.min(maxDy, canvasHeight() - height - startY);
+        }
+
+        return new double[]{
+                clamp(deltaX, minDx, Math.max(minDx, maxDx)),
+                clamp(deltaY, minDy, Math.max(minDy, maxDy))
+        };
     }
 
     /**
@@ -530,12 +640,15 @@ final class CanvasController {
      * moment it was ever selected, since selecting stayed applied via
      * {@code DropShadow.setInput} chains the glow *on top of* the tint
      * (rendered first, then the shadow around the result), and deselecting
-     * restores the tint alone instead of {@code null}.
+     * restores the tint alone instead of {@code null}. Every widget in
+     * {@code selectedIds} gets the glow, not just one — the resize handle,
+     * though, only ever applies to a *single* selected widget (see
+     * {@link #soleSelectedId}), so it hides for zero or multiple selected.
      */
-    private void applySelectionHighlight(String selectedId) {
+    private void applySelectionHighlight(Set<String> selectedIds) {
         nodesById.forEach((id, node) -> {
             Effect base = baseEffectById.get(id);
-            if (id.equals(selectedId)) {
+            if (selectedIds.contains(id)) {
                 DropShadow glow = new DropShadow(8, Themes.SELECTION_HIGHLIGHT_COLOR);
                 glow.setInput(base);
                 node.setEffect(glow);
@@ -545,7 +658,8 @@ final class CanvasController {
         });
 
         Node selected = selectedNode();
-        if (selected == null || !isResizable(selectedId)) {
+        String selectedId = soleSelectedId();
+        if (selected == null || selectedId == null || !isResizable(selectedId)) {
             resizeHandle.setVisible(false);
             return;
         }

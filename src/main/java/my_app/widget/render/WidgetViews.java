@@ -56,15 +56,21 @@ public final class WidgetViews {
     }
 
     private static Component buildTextButton(SkinModel skin, Image atlasImage, WidgetSpec.TextButtonSpec spec) {
-        SkinModel.ResolvedDrawable drawable = resolveDrawable(skin, "TextButtonStyle", spec.styleName(), "up");
-        Component background = DrawableView.of(atlasImage, drawable.region(), drawable.tint());
+        // TextButtonStyle.up is optional in real libGDX too - a text-only
+        // button (no background image at all, just colored text - e.g. a
+        // hyperlink-style style) is a valid, real style some skins declare
+        // (gdx-skins/flat's "text"/"textToggle", terra-mother's "default").
+        // Requiring it unconditionally threw for every one of them.
+        Optional<SkinModel.ResolvedDrawable> drawable = resolveOptionalDrawable(skin, "TextButtonStyle", spec.styleName(), "up");
 
         Color fontColor = resolveFontColorOverride(skin, "TextButtonStyle", spec.styleName(), spec.fontColor());
         Optional<GdxFontLoader.LoadedFont> font = resolveFont(skin, "TextButtonStyle", spec.styleName());
         BitmapTextView label = new BitmapTextView(atlasImage, font, spec.text(), fontColor);
         label.getNode().setMouseTransparent(true);
 
-        StackPane stack = new StackPane(background.getNode(), label.getNode());
+        StackPane stack = drawable
+                .map(d -> new StackPane(DrawableView.of(atlasImage, d.region(), d.tint()).getNode(), label.getNode()))
+                .orElseGet(() -> new StackPane(label.getNode()));
         StackPane.setAlignment(label.getNode(), Pos.CENTER);
         return Component.CreateFromJavaFxNode(stack);
     }

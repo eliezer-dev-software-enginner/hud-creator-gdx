@@ -35,6 +35,7 @@ import my_app.widget.render.WidgetViews;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The "Palette" sidebar: reacts to the app's loaded {@link SkinModel} and
@@ -90,7 +91,7 @@ final class SkinPalettePanel {
         // Deliberately NOT subscribed to placedWidgets() — every keystroke in the
         // nickname field below updates it, and rebuilding on every keystroke would
         // tear down the very Input the user is typing into.
-        viewModel.selectedWidgetIdState().subscribe(id -> rebuildCatalog(viewModel.skinState().get(), viewModel));
+        viewModel.selectedWidgetIdsState().subscribe(ids -> rebuildCatalog(viewModel.skinState().get(), viewModel));
     }
 
     Component asComponent() {
@@ -140,11 +141,23 @@ final class SkinPalettePanel {
         catalogNode.getChildren().add(buildRegionList(skin, atlasImage).getNode());
     }
 
-    /** Shows the selected widget's id/type, a live-editable nickname field, and (for TextButton/Label widgets) a live-editable text field — or null if no widget is selected. */
+    /**
+     * Shows the selected widget's id/type, a live-editable nickname field,
+     * and (for TextButton/Label widgets) a live-editable text field — or
+     * null if no widget is selected. When more than one widget is selected,
+     * shows just a count instead — editing text/color/nickname for several
+     * different widgets' specs at once isn't supported (yet).
+     */
     private Component buildPropertiesSection(HomeScreenViewModel viewModel) {
-        String selectedId = viewModel.selectedWidgetIdState().get();
-        if (selectedId == null) return null;
+        Set<String> selectedIds = viewModel.selectedWidgetIdsState().get();
+        if (selectedIds.isEmpty()) return null;
+        if (selectedIds.size() > 1) {
+            return new Column(new ColumnProps().spacingOf(6)).children(
+                    sectionHeader("Properties"),
+                    new Text(selectedIds.size() + " widgets selected"));
+        }
 
+        String selectedId = selectedIds.iterator().next();
         PlacedWidget widget = viewModel.placedWidgets().get().stream()
                 .filter(w -> w.id().equals(selectedId))
                 .findFirst()
