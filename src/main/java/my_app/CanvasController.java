@@ -59,11 +59,14 @@ final class CanvasController {
     private static final double GRID_SPACING = 20;
     private static final double RESIZE_HANDLE_SIZE = 10;
     private static final double MIN_WIDGET_SIZE = 10;
+    private static final double PASTE_OFFSET = 20;
 
     private final Canva canva;
     private final HomeScreenViewModel viewModel;
     private final Map<String, Node> nodesById = new HashMap<>();
     private final Map<String, BitmapTextView> textViewsById = new HashMap<>();
+    /** Ctrl+C's write path, Ctrl+V's read path — an in-app clipboard, not the OS one (these are structured widget specs, not text). */
+    private List<PlacedWidget> clipboard = List.of();
     /**
      * Each widget's own effect (a {@code Blend} tint for a {@code Skin.TintedDrawable}-based
      * background, or {@code null}) *before* selection is ever applied.
@@ -91,24 +94,37 @@ final class CanvasController {
         setUpGrid();
         setUpGuides();
         setUpResizeHandle();
-        setUpDeleteKey();
+        setUpKeyboardShortcuts();
     }
 
     /**
-     * Deletes every selected widget on Delete/Backspace. Keyboard events only
-     * reach a node that has focus, and the Canva's Pane isn't focus-traversable
-     * or focused by default (it's a plain Pane, not a Control) — so widget
-     * selection ({@link #makeMovable}'s press handler) also requests focus on
-     * the pane, otherwise this would never fire from a real key press.
+     * Delete/Backspace removes every selected widget; Ctrl(Cmd)+C/V copy/paste
+     * the selection through an in-app clipboard ({@link #copySelectedWidgets}/
+     * {@link #pasteClipboard}); Ctrl(Cmd)+D duplicates it directly
+     * ({@link #duplicateSelectedWidgets}), without disturbing whatever's
+     * already on the clipboard. Keyboard events only reach a node that has
+     * focus, and the Canva's Pane isn't focus-traversable or focused by
+     * default (it's a plain Pane, not a Control) — so widget selection
+     * ({@link #makeMovable}'s press handler) also requests focus on the pane,
+     * otherwise none of this would ever fire from a real key press.
      */
-    private void setUpDeleteKey() {
+    private void setUpKeyboardShortcuts() {
         Pane pane = (Pane) canva.getNode();
         pane.setFocusTraversable(true);
         pane.setOnKeyPressed(event -> {
-            if (event.getCode() != KeyCode.DELETE && event.getCode() != KeyCode.BACK_SPACE) return;
-
-            if (!viewModel.selectedWidgetIdsState().get().isEmpty()) {
-                removeSelectedWidgets();
+            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                if (!viewModel.selectedWidgetIdsState().get().isEmpty()) {
+                    removeSelectedWidgets();
+                    event.consume();
+                }
+            } else if (event.isShortcutDown() && event.getCode() == KeyCode.C) {
+                copySelectedWidgets();
+                event.consume();
+            } else if (event.isShortcutDown() && event.getCode() == KeyCode.V) {
+                pasteClipboard();
+                event.consume();
+            } else if (event.isShortcutDown() && event.getCode() == KeyCode.D) {
+                duplicateSelectedWidgets();
                 event.consume();
             }
         });
@@ -385,7 +401,7 @@ final class CanvasController {
         deselect(widgetId);
     }
 
-    /** Removes every currently-selected widget — the Delete/Backspace key's bulk write path ({@link #setUpDeleteKey}). Snapshots the selection first since {@link #removeWidget} mutates it as it goes. */
+    /** Removes every currently-selected widget — the Delete/Backspace key's bulk write path ({@link #setUpKeyboardShortcuts}). Snapshots the selection first since {@link #removeWidget} mutates it as it goes. */
     private void removeSelectedWidgets() {
         Set<String> toRemove = Set.copyOf(viewModel.selectedWidgetIdsState().get());
         toRemove.forEach(this::removeWidget);
@@ -398,6 +414,76 @@ final class CanvasController {
         Set<String> updated = new LinkedHashSet<>(current);
         updated.remove(widgetId);
         viewModel.selectedWidgetIdsState().set(Set.copyOf(updated));
+    }
+
+    /** Copies every currently-selected widget onto the in-app {@link #clipboard} (Ctrl+C) — a no-op replace when nothing's selected, so an empty selection can't wipe out a previous copy. */
+    void copySelectedWidgets() {
+        Set<String> selected = viewModel.selectedWidgetIdsState().get();
+        if (selected.isEmpty()) return;
+        clipboard = viewModel.placedWidgets().get().stream()
+                .filter(w -> selected.contains(w.id()))
+                .toList();
+    }
+
+    /** Pastes whatever's on the {@link #clipboard} (Ctrl+V) - see {@link #pasteWidgets}. */
+    void pasteClipboard() {
+        pasteWidgets(clipboard);
+    }
+
+    /** Copies the current selection and immediately pastes it (Ctrl+D) - unlike {@link #copySelectedWidgets}, never touches {@link #clipboard}, so it can't clobber whatever the user last explicitly copied. */
+    void duplicateSelectedWidgets() {
+        Set<String> selected = viewModel.selectedWidgetIdsState().get();
+        if (selected.isEmpty()) return;
+        List<PlacedWidget> toDuplicate = viewModel.placedWidgets().get().stream()
+                .filter(w -> selected.contains(w.id()))
+                .toList();
+        pasteWidgets(toDuplicate);
+    }
+
+    /**
+     * Places a fresh copy of each of {@code widgets}, offset by
+     * {@link #PASTE_OFFSET} from its own original (x, y) and clamped to stay
+     * inside the canvas exactly like {@link #place} - a multi-widget copy
+     * keeps every pasted widget's position relative to the others, since each
+     * is offset from its *own* original spot, not a shared one. The pasted
+     * copies become the new selection. Never keeps the original's nickname -
+     * the libGDX-side loader looks actors up by nickname, so two widgets
+     * sharing one would make that lookup ambiguous. Silently skips a widget
+     * whose spec no longer resolves (e.g. clipboard copied under a since-
+     * replaced skin) rather than failing the whole paste.
+     */
+    private void pasteWidgets(List<PlacedWidget> widgets) {
+        if (widgets.isEmpty()) return;
+        SkinModel skin = viewModel.skinState().get();
+        if (skin == null) return;
+        Image atlasImage = SkinImages.loadAtlasImage(skin);
+
+        Set<String> newIds = new LinkedHashSet<>();
+        for (PlacedWidget original : widgets) {
+            Component component;
+            try {
+                component = WidgetViews.build(skin, atlasImage, original.spec());
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            Node node = component.getNode();
+            double width = original.width() != null ? original.width() : node.prefWidth(-1);
+            double height = original.height() != null ? original.height() : node.prefHeight(-1);
+            double x = clamp(original.x() + PASTE_OFFSET, 0, Math.max(0, canvasWidth() - width));
+            double y = clamp(original.y() + PASTE_OFFSET, 0, Math.max(0, canvasHeight() - height));
+
+            String newId = viewModel.nextWidgetId();
+            finishPlacing(component, original.spec(), x, y, newId, null, original.width(), original.height());
+            newIds.add(newId);
+        }
+        if (!newIds.isEmpty()) {
+            viewModel.selectedWidgetIdsState().set(Set.copyOf(newIds));
+        }
+    }
+
+    /** The clipboard's current size (tests only). */
+    int clipboardSize() {
+        return clipboard.size();
     }
 
     /** The JavaFX node for a placed widget id, or null — used by tests instead of indexing into the Canva's Pane children (which also holds the guide lines). */
