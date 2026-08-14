@@ -96,3 +96,29 @@ jobs:
             dist/*.deb
             dist/*.exe
           if-no-files-found: error
+
+  # Runs after both platforms finish, regardless of trigger (manual "Run workflow" or a
+  # pushed "v*" tag) — creates the release (and its tag, if it doesn't exist yet) from the
+  # current commit and attaches both installers. Re-running against the same projectVersion
+  # updates that same release's assets in place rather than failing.
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve app version
+        id: version
+        run: echo "version=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          files: artifacts/**/*
