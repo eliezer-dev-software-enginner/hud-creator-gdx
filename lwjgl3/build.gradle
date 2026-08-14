@@ -1,0 +1,33 @@
+plugins {
+  id 'application'
+}
+
+eclipse.project.name = appName + '-lwjgl3'
+application.mainClass = 'my_app.Lwjgl3Launcher'
+
+dependencies {
+  implementation project(':core')
+  implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+
+  // Forces LWJGL3 to use at least $lwjgl3Version, to avoid problems on Java 25+
+  // (same pin scene-game-2d-editor uses).
+  constraints {
+    implementation("org.lwjgl:lwjgl:$lwjgl3Version")
+    implementation("org.lwjgl:lwjgl-glfw:$lwjgl3Version")
+    implementation("org.lwjgl:lwjgl-jemalloc:$lwjgl3Version")
+    implementation("org.lwjgl:lwjgl-openal:$lwjgl3Version")
+    implementation("org.lwjgl:lwjgl-opengl:$lwjgl3Version")
+    implementation("org.lwjgl:lwjgl-stb:$lwjgl3Version")
+  }
+}
+
+run {
+  jvmArgs += '--enable-native-access=ALL-UNNAMED'
+}
+
+jar {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  manifest {
+    attributes 'Main-Class': application.mainClass, 'Enable-Native-Access': 'ALL-UNNAMED'
+  }
+}

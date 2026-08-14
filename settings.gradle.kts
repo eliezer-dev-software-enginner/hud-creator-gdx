@@ -1,1 +1,0 @@
-rootProject.name = "megalodonte-app-scene2d-builder"

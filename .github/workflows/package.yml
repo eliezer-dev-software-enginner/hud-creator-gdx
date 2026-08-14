@@ -1,0 +1,98 @@
+name: Package installers
+
+# Manual trigger (Actions tab -> "Package installers" -> "Run workflow") for an
+# on-demand build, plus automatic on any "v*" tag for actual releases.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      # jpackage's --type exe/msi shells out to WiX to actually build the installer —
+      # not needed for --type deb (Linux) or --type app-image (either OS).
+      - name: Install WiX Toolset (Windows only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install wixtoolset -y
+
+      - name: Add WiX to PATH (Windows only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wix = Get-ChildItem "C:\Program Files (x86)\WiX Toolset v*\bin" -Directory | Select-Object -First 1
+          echo "$($wix.FullName)" >> $env:GITHUB_PATH
+
+      - name: Build runnable distribution
+        shell: bash
+        run: ./gradlew :lwjgl3:installDist
+
+      # The jar's own filename embeds `projectVersion` from gradle.properties (e.g.
+      # lwjgl3-1.0.0.jar) — read both here instead of hardcoding, so a version bump
+      # never needs a matching edit to this workflow.
+      - name: Resolve main jar name and app version
+        shell: bash
+        run: |
+          JAR=$(basename lwjgl3/build/install/lwjgl3/lib/lwjgl3-*.jar)
+          echo "MAIN_JAR=$JAR" >> "$GITHUB_ENV"
+          VERSION=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Package .deb (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          jpackage \
+            --type deb \
+            --input lwjgl3/build/install/lwjgl3/lib \
+            --main-jar "$MAIN_JAR" \
+            --main-class my_app.Lwjgl3Launcher \
+            --name scene2d-hud-creator-gdx \
+            --app-version "$APP_VERSION" \
+            --vendor "scene2d-hud-creator-gdx" \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
+            --icon assets/app_ico.png \
+            --linux-shortcut \
+            --linux-menu-group "Jogos" \
+            --dest dist
+
+      - name: Package .exe (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          jpackage \
+            --type exe \
+            --input lwjgl3/build/install/lwjgl3/lib \
+            --main-jar "$MAIN_JAR" \
+            --main-class my_app.Lwjgl3Launcher \
+            --name scene2d-hud-creator-gdx \
+            --app-version "$APP_VERSION" \
+            --vendor "scene2d-hud-creator-gdx" \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
+            --icon assets/app_ico.ico \
+            --win-shortcut \
+            --win-menu \
+            --win-dir-chooser \
+            --dest dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene2d-hud-creator-gdx-${{ runner.os }}
+          path: |
+            dist/*.deb
+            dist/*.exe
+          if-no-files-found: error

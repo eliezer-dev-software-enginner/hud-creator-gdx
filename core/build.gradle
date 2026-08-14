@@ -1,0 +1,23 @@
+eclipse.project.name = appName + '-core'
+
+dependencies {
+  api "com.badlogicgames.gdx:gdx:$gdxVersion"
+  // Desktop-only tool (no android module), same reasoning scene-game-2d-editor
+  // uses: core can depend on the lwjgl3 backend directly.
+  api "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+
+  api 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+
+  // In-canvas menu bar + Hierarchy/Inspector panels, sharing the same GL context/window
+  // as the libGDX scene (see EditorApplication-style wiring in HudEditorScreen) — same
+  // approach scene-game-2d-editor uses instead of a separate JavaFX process.
+  api "io.github.spair:imgui-java-binding:$imguiVersion"
+  api "io.github.spair:imgui-java-lwjgl3:$imguiVersion"
+  runtimeOnly "io.github.spair:imgui-java-natives-linux:$imguiVersion"
+  runtimeOnly "io.github.spair:imgui-java-natives-windows:$imguiVersion"
+  runtimeOnly "io.github.spair:imgui-java-natives-macos:$imguiVersion"
+}
+
+jar {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

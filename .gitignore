@@ -1,52 +1,36 @@
-.gradle
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
-.kotlin
+## Gradle:
+.gradle/
+gradle-app.setting
+/build/
+/core/build/
+/lwjgl3/build/
 
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
+## Java:
+*.class
+hs_err_pid*
+.attach_pid*
+
+## ImGui (generated at runtime — panel positions/sizes, see HudEditorScreen.initImGui):
+editor-layout.ini
+
+## IntelliJ, Android Studio:
+.idea/
+*.ipr
 *.iws
 *.iml
-*.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
 
-### Eclipse ###
-.apt_generated
+## Eclipse:
 .classpath
-.factorypath
 .project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
+.metadata/
+/core/bin/
+/lwjgl3/bin/
+.settings/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-### VS Code ###
-.vscode/
-
-### Mac OS ###
+## OS-specific:
 .DS_Store
+Thumbs.db
 
-*.txt
-*.db
-
-temp
-dist
-tinted-drawable-fix.md
+## Personal packaging notes, not project docs (see the file itself):
+BUILD.md
 docs
-/.venv/

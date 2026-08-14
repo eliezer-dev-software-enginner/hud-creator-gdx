@@ -1,0 +1,29 @@
+allprojects {
+  apply plugin: 'eclipse'
+  apply plugin: 'idea'
+}
+
+configure(subprojects) {
+  apply plugin: 'java-library'
+  java {
+    toolchain {
+      languageVersion = JavaLanguageVersion.of(25)
+    }
+  }
+
+  compileJava {
+    options.incremental = true
+    options.encoding = 'UTF-8'
+  }
+}
+
+subprojects {
+  version = "$projectVersion"
+  ext.appName = 'scene2d-hud-creator-gdx'
+  repositories {
+    mavenCentral()
+    mavenLocal()
+  }
+}
+
+eclipse.project.name = 'scene2d-hud-creator-gdx' + '-parent'
