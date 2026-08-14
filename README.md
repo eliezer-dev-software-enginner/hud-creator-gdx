@@ -146,14 +146,5 @@ for how this project relates to `libgdx-example-game` (the sample game
 that consumes the exported JSON) and `scene2d-hud-loader` (the library
 that parses it there).
 
-## Documentation
-
-- [`docs/CONTEXT.md`](docs/CONTEXT.md) — architecture, modules, and how
-  each feature actually works
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — architecture decisions and
-  bug postmortems, dated, with the why behind each
-- [`docs/TODO.md`](docs/TODO.md) — what's done, what's a deliberate gap,
-  and what's an unconfirmed best-effort fix
-
 Still early — this is a young project and actively being worked on, so
 bug reports, feature requests, and general feedback are welcome.
