@@ -19,11 +19,11 @@ configure(subprojects) {
 
 subprojects {
   version = "$projectVersion"
-  ext.appName = 'scene2d-hud-creator-gdx'
+  ext.appName = "$appName"
   repositories {
     mavenCentral()
     mavenLocal()
   }
 }
 
-eclipse.project.name = 'scene2d-hud-creator-gdx' + '-parent'
+eclipse.project.name = "$appName" + '-parent'

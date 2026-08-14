@@ -9,7 +9,7 @@ public class Lwjgl3Launcher {
 
     public static void main(String[] args) {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
-        config.setTitle("scene2d HUD Creator");
+        config.setTitle("HUD Creator GDX");
         config.useVsync(true);
         config.setForegroundFPS(Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate + 1);
         config.setWindowedMode(

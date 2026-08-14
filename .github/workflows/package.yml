@@ -41,16 +41,22 @@ jobs:
         shell: bash
         run: ./gradlew :lwjgl3:installDist
 
-      # The jar's own filename embeds `projectVersion` from gradle.properties (e.g.
-      # lwjgl3-1.0.0.jar) — read both here instead of hardcoding, so a version bump
-      # never needs a matching edit to this workflow.
-      - name: Resolve main jar name and app version
+      # Every packaging value below (jar name, version, app name/vendor/menu group) is read
+      # from gradle.properties instead of hardcoded here — renaming the app or bumping its
+      # version only ever needs editing that one file, nothing in this workflow.
+      - name: Resolve build metadata from gradle.properties
+        id: meta
         shell: bash
         run: |
           JAR=$(basename lwjgl3/build/install/lwjgl3/lib/lwjgl3-*.jar)
           echo "MAIN_JAR=$JAR" >> "$GITHUB_ENV"
           VERSION=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+          NAME=$(grep '^appName=' gradle.properties | cut -d= -f2)
+          echo "APP_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "APP_VENDOR=$(grep '^appVendor=' gradle.properties | cut -d= -f2)" >> "$GITHUB_ENV"
+          echo "APP_MENU_GROUP=$(grep '^appMenuGroup=' gradle.properties | cut -d= -f2)" >> "$GITHUB_ENV"
 
       - name: Package .deb (Linux)
         if: runner.os == 'Linux'
@@ -61,13 +67,13 @@ jobs:
             --input lwjgl3/build/install/lwjgl3/lib \
             --main-jar "$MAIN_JAR" \
             --main-class my_app.Lwjgl3Launcher \
-            --name scene2d-hud-creator-gdx \
+            --name "$APP_NAME" \
             --app-version "$APP_VERSION" \
-            --vendor "scene2d-hud-creator-gdx" \
+            --vendor "$APP_VENDOR" \
             --java-options "--enable-native-access=ALL-UNNAMED" \
             --icon assets/app_ico.png \
             --linux-shortcut \
-            --linux-menu-group "Jogos" \
+            --linux-menu-group "$APP_MENU_GROUP" \
             --dest dist
 
       - name: Package .exe (Windows)
@@ -79,9 +85,9 @@ jobs:
             --input lwjgl3/build/install/lwjgl3/lib \
             --main-jar "$MAIN_JAR" \
             --main-class my_app.Lwjgl3Launcher \
-            --name scene2d-hud-creator-gdx \
+            --name "$APP_NAME" \
             --app-version "$APP_VERSION" \
-            --vendor "scene2d-hud-creator-gdx" \
+            --vendor "$APP_VENDOR" \
             --java-options "--enable-native-access=ALL-UNNAMED" \
             --icon assets/app_ico.ico \
             --win-shortcut \
@@ -91,7 +97,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: scene2d-hud-creator-gdx-${{ runner.os }}
+          name: ${{ steps.meta.outputs.name }}-${{ runner.os }}
           path: |
             dist/*.deb
             dist/*.exe
@@ -109,9 +115,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve app version
-        id: version
-        run: echo "version=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+      - name: Resolve build metadata from gradle.properties
+        id: meta
+        run: |
+          echo "version=$(grep '^projectVersion=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          echo "name=$(grep '^appName=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -119,6 +127,6 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.meta.outputs.version }}
+          name: ${{ steps.meta.outputs.name }} v${{ steps.meta.outputs.version }}
           files: artifacts/**/*
